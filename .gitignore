@@ -20,4 +20,7 @@ node_modules/
 
 # Tooling scratch — not part of the app
 gitinit.mjs
+commit.mjs
+remote.mjs
+push.mjs
 .claude-launch-note
