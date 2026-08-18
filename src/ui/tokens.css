@@ -1,0 +1,112 @@
+/*
+  Design tokens — extracted from Figma, file FY8AMjl9gLCavqWjLsWxLv, page 63:6427.
+  Values here are read from the design, not chosen. Do not "tidy" them.
+*/
+
+@font-face {
+  font-family: 'Bitcount Single';
+  src: url('/fonts/BitcountSingle.ttf') format('truetype-variations');
+  font-weight: 100 900;
+  font-display: block;
+}
+
+/*
+  The MASK face — the letterform the camera is stencilled through.
+
+  BUNDLED, not a system font, and that is the whole point. This was
+  `HelveticaNeue-CondensedBold`, which exists on macOS and NOT on iOS: on a
+  phone it fell through the stack to Helvetica Neue Regular, silently. Measured
+  on the real 44x48 grid, that regression is severe — W drops from 41 rows to
+  33 and the spread across A-Z widens from 5 to 12, because a wider W binds the
+  grid's width ceiling harder and drags the shared scale down for every letter.
+  That is exactly the sizing problem the condensed face was chosen to fix.
+
+  `loadFont.ts` fingerprints USER-loaded fonts against a fallback to catch
+  precisely this substitution; the built-in face had no such guard. Bundling
+  removes the need for one.
+
+  Oswald, SIL Open Font License (see `public/fonts/Oswald-OFL.txt`) — a
+  condensed grotesque, variable 200-700. `font-display: block` because a mask
+  rasterized against a fallback would be the wrong letterform entirely, and
+  `main.ts` already waits on `document.fonts.ready` before the first raster.
+*/
+@font-face {
+  font-family: 'Impression Mask';
+  src: url('/fonts/Oswald.ttf') format('truetype-variations');
+  font-weight: 200 700;
+  font-display: block;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* ── Colour ──────────────────────────────────────────────
+     `--grey` is the dial/button fill. `--ink` is the mark ON that fill —
+     it is NOT pure black, and the difference is visible at 79px. */
+  --bg:        #000000;   /* bg */
+  --grey:      #8a8377;   /* colour/grey  — dial + button fill */
+  --ink:       #14110f;   /* colour/ink   — marks on grey, AND the control-group surface */
+  --accent:    #ff6200;   /* accent — active selection AND the playhead */
+  --hair:      #d9d4ca;   /* colour/hair  — the Clicked button state */
+
+  /* NOT a Figma variable. The dot-field render colour, a code-side constant
+     shared with the v1 pipeline (`style.css` calls it `--fg`). Every other
+     colour in this block resolves to a named Figma variable; this one does
+     not, so do not cite it as extracted. */
+  --dot:       #f2f0ed;
+
+  /* Disabled. Verified against node 62:5042 (State=Disabled) and the binding
+     at 62:5519: the fill darkens to `colour/dim` while the marks lighten to
+     `dim` — LOWER contrast in both directions, not simply dimmer.
+     NOTE the trap: `colour/dim` and `dim` are two DIFFERENT Figma variables
+     distinguished only by the namespace prefix. */
+  --grey-disabled: #5b544b;   /* colour/dim */
+  --ink-disabled:  #757575;   /* dim — also the icon Rest Reversed fill */
+
+  /* ── Type ────────────────────────────────────────────────
+     Bitcount Single: the readouts. Variable font — the design pins
+     CRSV 0, ELSH 0, ELXP 0, so we do the same.
+     Labels: the design specifies Tenon, which is not licensed here. The system
+     UI stack stands in by decision, not by accident — at 11px/1.76px tracking
+     in all-caps the difference is small. `Tenon` stays first in the stack so
+     the real face is picked up automatically if it is ever installed. */
+  --font-readout: 'Bitcount Single', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-label:   'Tenon', -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+
+  --readout-tracking-13: 2.08px;  /* 13px readout, mini dial */
+  --readout-tracking-16: 2.56px;  /* 16px readout, large dial speed */
+  --label-tracking-11:   1.76px;  /* 11px label */
+
+  /* ── Geometry ────────────────────────────────────────────
+     Straight from the Figma component frames. */
+  --mini-dial:    79px;
+  --large-dial:  170px;
+  --dial-dot:      4px;
+  --icon:         24px;
+  --utility-h:    40px;
+  /* No --btn-h: the design declares no button height. 16px padding + a 24px
+     icon computes to 56. Declaring it as a token invites it being set as a
+     height, which then fights the border. */
+
+  --screen-w:    390px;
+  --screen-h:    810px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--dot);
+  font-family: var(--font-label);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* Variable-font axes pinned to the design's settings. */
+.readout {
+  font-family: var(--font-readout);
+  font-variation-settings: 'CRSV' 0, 'ELSH' 0, 'ELXP' 0;
+  font-weight: 400;
+}

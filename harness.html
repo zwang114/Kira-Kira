@@ -1,0 +1,428 @@
+<meta charset="utf-8">
+<title>Impression — Listening Harness</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0a0a0a; color: #f2f0ed; padding: 24px;
+    font: 300 13px/1.5 -apple-system, BlinkMacSystemFont, Inter, system-ui, sans-serif;
+  }
+  h1 { font-size: 13px; letter-spacing: .18em; text-transform: uppercase; font-weight: 400; margin: 0 0 4px; }
+  .sub { font-size: 11px; color: #757575; margin-bottom: 20px; max-width: 640px; line-height: 1.6; }
+  h2 { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: #757575;
+       font-weight: 400; margin: 26px 0 10px; }
+  .wrap { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  canvas#stage { background: #000; display: block; }
+  .panel { min-width: 300px; }
+  .row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  button {
+    appearance: none; background: transparent; color: #f2f0ed; border: 1px solid #444;
+    font: inherit; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    padding: 8px 14px; cursor: pointer; border-radius: 2px;
+  }
+  button:hover:not(:disabled) { border-color: #f2f0ed; }
+  button.on { background: #ff6200; border-color: #ff6200; color: #000; }
+  button:disabled { opacity: .3; cursor: not-allowed; }
+  button.primary { border-color: #f2f0ed; padding: 10px 22px; }
+  select, input[type=range] { background: #1a1a1a; color: #f2f0ed; border: 1px solid #444; font: inherit; font-size: 11px; }
+  input[type=range] { width: 120px; padding: 0; }
+  label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #757575; min-width: 74px; display:inline-block; }
+  .mono { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  .val { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 11px; min-width: 3.4em; display:inline-block; color:#f2f0ed; }
+  table { border-collapse: collapse; font-size: 11px; }
+  th { text-align: left; font-weight: 400; color: #757575; font-size: 9px; letter-spacing: .12em;
+       text-transform: uppercase; padding: 4px 12px 4px 0; }
+  td { padding: 4px 12px 4px 0; }
+  .sw { width: 22px; height: 22px; display: inline-block; vertical-align: middle; }
+  .warn { color: #ff6200; }
+  .note { font-size: 11px; color: #757575; line-height: 1.6; max-width: 640px; margin-top: 8px; }
+  .stat { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 11px; color: #757575; }
+  .stat b { color: #f2f0ed; font-weight: 400; }
+  fieldset { border: 1px solid #2a2a2a; padding: 12px 14px; margin: 0 0 14px; border-radius: 3px; }
+  legend { font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: #757575; padding: 0 6px; }
+</style>
+
+<h1>Impression — Listening Harness</h1>
+<div class="sub">
+  The point of this page is to <strong>hear it</strong>. Four dot shapes, assigned per cell by
+  brightness; each shape plays its own voice. Runs merge across shapes and the
+  <em>dominant</em> shape in a run picks the instrument, which is what keeps the note
+  count from tripling. Nothing here is designed — it exists to settle the audio.
+</div>
+
+<div class="wrap">
+  <div>
+    <canvas id="stage" width="352" height="440"></canvas>
+    <div class="row" style="margin-top:10px">
+      <button id="play" class="primary">Play</button>
+      <button id="loop">Loop</button>
+      <button id="stop" disabled>Stop</button>
+    </div>
+    <div class="stat" id="stats"></div>
+  </div>
+
+  <div class="panel">
+    <fieldset>
+      <legend>Source</legend>
+      <div class="row">
+        <label>Letter</label>
+        <select id="letter"></select>
+        <button id="cam">Use camera</button>
+      </div>
+      <div class="row">
+        <label>Lit</label>
+        <input type="range" id="lit" min="0.05" max="0.95" step="0.01" value="0.34">
+        <span class="val" id="litV">34%</span>
+      </div>
+      <div class="row">
+        <label>Grid</label>
+        <input type="range" id="grid" min="20" max="60" step="2" value="44">
+        <span class="val" id="gridV">44</span>
+      </div>
+      <div class="row">
+        <label>Speed</label>
+        <button class="spd on" data-x="1">1×</button>
+        <button class="spd" data-x="2">2×</button>
+        <button class="spd" data-x="3">3×</button>
+        <span class="val" id="sweepV">3.00s</span>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Voice per shape</legend>
+      <table id="voices"></table>
+      <div class="note" style="margin-top:10px">
+        Four profiles, one per shape. Level defaults to 50%.
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Run merging</legend>
+      <div class="row">
+        <button id="merge" class="on">Merge across shapes</button>
+      </div>
+      <div class="note">
+        On: a horizontal run is one note, voiced by its dominant shape — note count
+        stays as it is today. Off: runs break at every shape change, so each shape
+        sounds separately. <strong>Toggle it while looping and listen.</strong>
+      </div>
+    </fieldset>
+  </div>
+</div>
+
+<h2>Column load — the thing that decides the voice cap</h2>
+<canvas id="hist" width="740" height="90"></canvas>
+<div class="note" id="loadNote"></div>
+
+<script type="module">
+import { play, stop, isPlaying, rowToHz } from './src/audio/engine.ts';
+// `PROFILE_LABELS`, not `VOICE_LABELS` — the symbol was renamed when voices
+// stopped being keyed by dot shape and became profiles the Sound Config
+// overlay assigns. The stale import threw a SyntaxError before any wiring
+// ran, so this whole page was inert: no canvases, no voice list, dead buttons.
+// It lists all SIX voices, including `marimba` and `pad`, which the app itself
+// cannot reach — auditioning those is precisely what a harness is for.
+import { PROFILE_LABELS as VOICE_LABELS } from './src/audio/voices.ts';
+
+// ── shape system, from calibration.html (solved values) ──────────────
+const SH = ['square','circle','diamond','cross'];      // darkest → lightest
+const SHAPES = { square:{rho:.700}, circle:{rho:.670}, diamond:{rho:.675}, cross:{rho:.465} };
+const XW = 0.18;                                        // cross stroke, relative
+
+function drawShape(ctx, shape, cx, cy, cell, gRho) {
+  const s = cell * SHAPES[shape].rho * (gRho / 0.62);
+  ctx.fillStyle = '#f2f0ed';
+  if (shape === 'square') ctx.fillRect(cx-s/2, cy-s/2, s, s);
+  else if (shape === 'circle') { ctx.beginPath(); ctx.arc(cx,cy,s/2,0,Math.PI*2); ctx.fill(); }
+  else if (shape === 'diamond') {
+    ctx.beginPath(); ctx.moveTo(cx,cy-s/2); ctx.lineTo(cx+s/2,cy); ctx.lineTo(cx,cy+s/2); ctx.lineTo(cx-s/2,cy);
+    ctx.closePath(); ctx.fill();
+  } else { const w = s*(XW/0.62); ctx.fillRect(cx-s/2,cy-w/2,s,w); ctx.fillRect(cx-w/2,cy-s/2,w,s); }
+}
+
+// ── glyph mask: polygon letters, enough for a listening test ─────────
+const GLYPHS = {
+  A: [[[.5,.03],[.985,.97],[.80,.97],[.685,.70],[.315,.70],[.20,.97],[.015,.97]],
+      [[.5,.22],[.625,.545],[.375,.545]]],
+  O: [[[.5,.03],[.80,.16],[.97,.5],[.80,.84],[.5,.97],[.2,.84],[.03,.5],[.2,.16]],
+      [[.5,.20],[.68,.30],[.79,.5],[.68,.70],[.5,.80],[.32,.70],[.21,.5],[.32,.30]]],
+  M: [[[.02,.97],[.02,.03],[.20,.03],[.5,.55],[.80,.03],[.98,.03],[.98,.97],[.83,.97],[.83,.33],[.57,.79],[.43,.79],[.17,.33],[.17,.97]]],
+  I: [[[.36,.03],[.64,.03],[.64,.97],[.36,.97]]],
+  E: [[[.10,.03],[.88,.03],[.88,.19],[.28,.19],[.28,.42],[.80,.42],[.80,.58],[.28,.58],[.28,.81],[.90,.81],[.90,.97],[.10,.97]]],
+  S: [[[.88,.16],[.78,.28],[.60,.19],[.40,.19],[.30,.27],[.36,.38],[.62,.45],[.86,.56],[.90,.75],[.78,.92],[.50,.98],[.22,.92],[.08,.78],[.20,.66],[.34,.79],[.54,.83],[.72,.78],[.76,.66],[.60,.59],[.34,.52],[.14,.40],[.12,.22],[.26,.08],[.52,.02],[.76,.06]]],
+};
+const inPoly = (px,py,poly) => { let c=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){const[xi,yi]=poly[i],[xj,yj]=poly[j];
+    if(((yi>py)!==(yj>py))&&(px<(xj-xi)*(py-yi)/(yj-yi)+xi))c=!c;} return c; };
+const inGlyph = (ch,u,v) => {
+  const g = GLYPHS[ch]; if(!g) return false;
+  if(!inPoly(u,v,g[0])) return false;
+  for(let i=1;i<g.length;i++) if(inPoly(u,v,g[i])) return false;
+  return true;
+};
+
+// ── deterministic blue-noise-ish matrix (screen-space locked) ────────
+const M = 64, mat = new Float32Array(M*M);
+{ let s = 1337; for(let i=0;i<M*M;i++){ s=(s*1664525+1013904223)>>>0; mat[i]=s/4294967296; } }
+const thr = (x,y) => mat[(((y%M)+M)%M)*M + (((x%M)+M)%M)];
+
+// ── state ───────────────────────────────────────────────────────────
+const S = {
+  letter:'A', lit:0.34, grid:44, speed:1, merge:true,
+  cells:null, shapeIdx:null, gw:0, gh:0,
+  voice:{ square:'square', circle:'circle', diamond:'diamond', cross:'triangle' },
+  level:{ square:.5, circle:.5, diamond:.5, cross:.5 },
+  camera:null, camTimer:null,
+};
+const $ = id => document.getElementById(id);
+const SWEEP_BASE = 3.0;
+const sweep = () => SWEEP_BASE / S.speed;
+
+// ── build the field ─────────────────────────────────────────────────
+function build() {
+  const gw = S.grid, gh = Math.round(gw*1.25);
+  const cells = [], shapeIdx = [];
+  for (let r=0;r<gh;r++){
+    const cl=[], sl=[];
+    for(let c=0;c<gw;c++){
+      const u=(c+.5)/gw, v=(r+.5)/gh;
+      if(!inGlyph(S.letter,u,v)){ cl.push(false); sl.push(-1); continue; }
+      // Value model: a diagonal gradient across the letter, recentred on the
+      // `lit` slider. The gradient spans a fixed +/-0.42 around the target mean
+      // so that raising `lit` moves the whole tonal range up rather than just
+      // scaling it — otherwise the top level (square) is unreachable below
+      // lit=0.75 and the ramp silently degrades to three shapes.
+      const grad = 1 - (u*0.35 + v*0.65);            // 0..1 across the diagonal
+      const val = S.lit + (grad - 0.5) * 0.84;
+      const lvl = Math.max(0, Math.min(4, Math.floor(val*4 + thr(c,r))));
+      cl.push(lvl>0);
+      sl.push(lvl>0 ? 4-lvl : -1);   // lvl4 -> idx0 square (darkest)
+    }
+    cells.push(cl); shapeIdx.push(sl);
+  }
+  S.cells=cells; S.shapeIdx=shapeIdx; S.gw=gw; S.gh=gh;
+}
+
+function render(playCol=-1) {
+  const cv=$('stage'), ctx=cv.getContext('2d');
+  const cell = cv.width/S.gw;
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,cv.width,cv.height);
+  for(let r=0;r<S.gh;r++) for(let c=0;c<S.gw;c++){
+    if(!S.cells[r][c]) continue;
+    drawShape(ctx, SH[S.shapeIdx[r][c]], c*cell+cell/2, r*cell+cell/2, cell, 0.62);
+  }
+  if(playCol>=0){
+    ctx.fillStyle='#ff6200';
+    ctx.fillRect(playCol*cell, 0, Math.max(1.5,cell*0.12), cv.height);
+  }
+}
+
+// ── run detection with shape-aware merging ──────────────────────────
+function analyzeColumn(col){
+  const runs=[];
+  for(let r=0;r<S.gh;r++){
+    if(!S.cells[r][col]) continue;
+    if(col>0 && S.cells[r][col-1]){
+      if(S.merge) continue;
+      if(S.shapeIdx[r][col-1]===S.shapeIdx[r][col]) continue;
+    }
+    let end=col, counts={};
+    while(end<S.gw && S.cells[r][end]){
+      if(!S.merge && end>col && S.shapeIdx[r][end]!==S.shapeIdx[r][col]) break;
+      counts[S.shapeIdx[r][end]]=(counts[S.shapeIdx[r][end]]||0)+1;
+      end++;
+    }
+    const dom = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+    runs.push({ row:r, len:end-col, shape:SH[+dom[0]] });
+  }
+  return runs;
+}
+
+function loadProfile(){
+  const per=[]; let max=0, total=0;
+  for(let c=0;c<S.gw;c++){ const n=analyzeColumn(c).length; per.push(n); max=Math.max(max,n); total+=n; }
+  return { per, max, avg: total/S.gw };
+}
+
+function drawHist(){
+  const {per,max,avg}=loadProfile();
+  const cv=$('hist'), ctx=cv.getContext('2d');
+  ctx.fillStyle='#0a0a0a'; ctx.fillRect(0,0,cv.width,cv.height);
+  const w=cv.width/per.length;
+  per.forEach((n,i)=>{
+    const h=(n/Math.max(12,max))*(cv.height-18);
+    ctx.fillStyle = n>12 ? '#ff6200' : '#555';
+    ctx.fillRect(i*w, cv.height-18-h, Math.max(1,w-1), h);
+  });
+  // cap line at 12
+  const capY=cv.height-18-(12/Math.max(12,max))*(cv.height-18);
+  ctx.strokeStyle='#f2f0ed'; ctx.setLineDash([3,3]); ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,capY); ctx.lineTo(cv.width,capY); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle='#757575'; ctx.font='9px ui-monospace,Menlo,monospace';
+  ctx.fillText('cap 12', 4, capY-3);
+  const over=per.filter(n=>n>12).length;
+  $('loadNote').innerHTML = `Peak <b>${max}</b> note-starts in one column · average <b>${avg.toFixed(1)}</b> · `
+    + `<span class="${over?'warn':''}">${over} of ${per.length} columns exceed the 12-voice cap</span>. `
+    + `Orange bars are columns being truncated.`;
+  $('loadNote').className='note stat';
+}
+
+// ── playback ────────────────────────────────────────────────────────
+let playing=false, looping=false, raf=null, ctxRef=null;
+
+async function start(){
+  const { getCtx } = await import('./src/audio/engine.ts');
+  const ac = await getCtx();
+  ctxRef = ac;
+  playing=true; $('stop').disabled=false; $('play').textContent='Playing…';
+  const colDur = sweep()/S.gw;
+  const t0 = ac.currentTime + 0.06;
+
+  // schedule every column on the AUDIO clock (never rAF)
+  const { default:_ } = { default:null };
+  for(let c=0;c<S.gw;c++){
+    let runs = analyzeColumn(c);
+    if(runs.length>12){
+      const step=(runs.length-1)/11, kept=[];
+      for(let i=0;i<12;i++) kept.push(runs[Math.round(i*step)]);
+      runs=kept;
+    }
+    const when = t0 + c*colDur;
+    const n = Math.max(1,runs.length);
+    for(const r of runs){
+      const lvl = S.level[r.shape];
+      const g = (0.2+0.62*0.25) * lvl * 2 / Math.sqrt(n);
+      playNoteVia(ac, rowToHz(r.row,S.gh), S.voice[r.shape], g, when, r.len*colDur*0.95);
+    }
+  }
+  // visual playhead follows the audio clock
+  const tick=()=>{
+    if(!playing) return;
+    const el = ac.currentTime - t0;
+    const col = Math.floor(el/colDur);
+    if(col>=S.gw){
+      if(looping){ stopAll(false); start(); return; }
+      stopAll(true); render(-1); return;
+    }
+    render(Math.max(0,col));
+    raf=requestAnimationFrame(tick);
+  };
+  raf=requestAnimationFrame(tick);
+}
+
+async function playNoteVia(ac, freq, shapeVoice, gain, when, dur){
+  const { playNote } = await import('./src/audio/voices.ts');
+  playNote(freq, shapeVoice, gain, when, dur, ac, ac.destination);
+}
+
+function stopAll(resetLabel=true){
+  playing=false;
+  if(raf) cancelAnimationFrame(raf); raf=null;
+  stop();
+  if(resetLabel){ $('play').textContent='Play'; $('stop').disabled=true; }
+}
+
+// ── voice table ─────────────────────────────────────────────────────
+function buildVoiceTable(){
+  const opts = Object.keys(VOICE_LABELS);
+  let html='<tr><th></th><th>shape</th><th>profile</th><th>level</th></tr>';
+  SH.forEach(sh=>{
+    html+=`<tr><td><canvas class="sw" id="sw_${sh}" width="22" height="22"></canvas></td>`
+        + `<td class="mono">${sh}</td>`
+        + `<td><select data-sh="${sh}" class="vsel">`
+        + opts.map(o=>`<option value="${o}"${S.voice[sh]===o?' selected':''}>${VOICE_LABELS[o]}</option>`).join('')
+        + `</select></td>`
+        + `<td><input type="range" class="lvl" data-sh="${sh}" min="0" max="1" step="0.05" value="${S.level[sh]}" style="width:88px">`
+        + `<span class="val" id="lv_${sh}">${Math.round(S.level[sh]*100)}%</span></td></tr>`;
+  });
+  $('voices').innerHTML=html;
+  SH.forEach(sh=>{
+    const c=$('sw_'+sh).getContext('2d');
+    c.fillStyle='#000'; c.fillRect(0,0,22,22);
+    drawShape(c, sh, 11, 11, 22, 0.62);
+  });
+  document.querySelectorAll('.vsel').forEach(s=>s.onchange=e=>{ S.voice[e.target.dataset.sh]=e.target.value; });
+  document.querySelectorAll('.lvl').forEach(s=>s.oninput=e=>{
+    const sh=e.target.dataset.sh; S.level[sh]=+e.target.value;
+    $('lv_'+sh).textContent=Math.round(S.level[sh]*100)+'%';
+  });
+}
+
+// ── camera ──────────────────────────────────────────────────────────
+async function toggleCamera(){
+  if(S.camera){
+    S.camera.getTracks().forEach(t=>t.stop()); S.camera=null;
+    clearInterval(S.camTimer); S.camTimer=null;
+    $('cam').classList.remove('on'); $('cam').textContent='Use camera';
+    build(); render(); drawHist(); return;
+  }
+  try{
+    S.camera = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+  }catch(err){ alert('Camera unavailable: '+err.name+'\n\nA secure context (localhost or https) is required.'); return; }
+  const v=document.createElement('video');
+  v.srcObject=S.camera; v.playsInline=true; v.muted=true; await v.play();
+  $('cam').classList.add('on'); $('cam').textContent='Camera on';
+  const tmp=document.createElement('canvas');
+  S.camTimer=setInterval(()=>{
+    if(playing) return;                   // freeze while playing
+    const gw=S.grid, gh=Math.round(gw*1.25);
+    tmp.width=gw; tmp.height=gh;
+    const tc=tmp.getContext('2d',{willReadFrequently:true});
+    tc.drawImage(v,0,0,gw,gh);
+    const d=tc.getImageData(0,0,gw,gh).data;
+    const cells=[],sidx=[];
+    // autolevel inside the mask only, 0.55 partial — as the real pipeline does
+    let lo=1,hi=0; const lum=[];
+    for(let r=0;r<gh;r++) for(let c=0;c<gw;c++){
+      const i=(r*gw+c)*4;
+      const y=(0.2126*d[i]+0.7152*d[i+1]+0.0722*d[i+2])/255;
+      lum.push(y);
+      if(inGlyph(S.letter,(c+.5)/gw,(r+.5)/gh)){ lo=Math.min(lo,y); hi=Math.max(hi,y); }
+    }
+    const k=0.55, eLo=lo*k, eHi=hi*k+(1-k), rng=Math.max(.02,eHi-eLo);
+    for(let r=0;r<gh;r++){
+      const cl=[],sl=[];
+      for(let c=0;c<gw;c++){
+        if(!inGlyph(S.letter,(c+.5)/gw,(r+.5)/gh)){ cl.push(false); sl.push(-1); continue; }
+        let val=(lum[r*gw+c]-eLo)/rng; val=val<0?0:val>1?1:val;
+        val = val<=0.04045 ? val/12.92 : Math.pow((val+0.055)/1.055,2.4);   // sRGB→linear
+        const lvl=Math.max(0,Math.min(4,Math.floor(val*4+thr(c,r))));
+        cl.push(lvl>0); sl.push(lvl>0?4-lvl:-1);
+      }
+      cells.push(cl); sidx.push(sl);
+    }
+    S.cells=cells; S.shapeIdx=sidx; S.gw=gw; S.gh=gh;
+    render(); drawHist(); updateStats();
+  },100);
+}
+
+function updateStats(){
+  let lit=0,byShape={square:0,circle:0,diamond:0,cross:0};
+  for(let r=0;r<S.gh;r++) for(let c=0;c<S.gw;c++)
+    if(S.cells[r][c]){ lit++; byShape[SH[S.shapeIdx[r][c]]]++; }
+  const tot=S.gw*S.gh;
+  $('stats').innerHTML = `<b>${lit}</b> lit of ${tot} (${(lit/tot*100).toFixed(0)}%) · `
+    + SH.map(s=>`${s} <b>${byShape[s]}</b>`).join(' · ');
+}
+
+// ── wiring ──────────────────────────────────────────────────────────
+$('letter').innerHTML = Object.keys(GLYPHS).map(k=>`<option>${k}</option>`).join('');
+$('letter').onchange = e => { S.letter=e.target.value; build(); render(); drawHist(); updateStats(); };
+$('lit').oninput = e => { S.lit=+e.target.value; $('litV').textContent=Math.round(S.lit*100)+'%';
+                          if(!S.camera){build(); render(); drawHist(); updateStats();} };
+$('grid').oninput = e => { S.grid=+e.target.value; $('gridV').textContent=S.grid;
+                           if(!S.camera){build(); render(); drawHist(); updateStats();} };
+document.querySelectorAll('.spd').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.spd').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); S.speed=+b.dataset.x;
+  $('sweepV').textContent=sweep().toFixed(2)+'s';
+});
+$('merge').onclick = () => { S.merge=!S.merge; $('merge').classList.toggle('on',S.merge);
+  $('merge').textContent = S.merge?'Merge across shapes':'Break at shape change'; drawHist(); };
+$('play').onclick = () => { if(!playing) start(); };
+$('loop').onclick = () => { looping=!looping; $('loop').classList.toggle('on',looping); };
+$('stop').onclick = () => { looping=false; $('loop').classList.remove('on'); stopAll(true); render(-1); };
+$('cam').onclick = toggleCamera;
+
+buildVoiceTable(); build(); render(); drawHist(); updateStats();
+</script>

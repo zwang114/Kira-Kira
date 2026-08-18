@@ -1,0 +1,114 @@
+<meta charset="utf-8">
+<title>Impression v2 — Screens</title>
+<link rel="stylesheet" href="./src/ui/tokens.css">
+<link rel="stylesheet" href="./src/ui/components.css">
+<style>
+  body { padding: 28px; background: #0a0a0a; }
+  h1 { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; font-weight: 400;
+       color: #f2f0ed; margin: 0 0 4px; }
+  .sub { font-size: 11px; color: #757575; margin-bottom: 26px; max-width: 640px; line-height: 1.6; }
+  .row { display: flex; gap: 32px; align-items: flex-start; flex-wrap: wrap; }
+  .cell { display: flex; flex-direction: column; gap: 10px; }
+  .cap { font-family: ui-monospace, Menlo, monospace; font-size: 10px; color: #5c5c5c; }
+  .screen { outline: 1px solid #1e1e1e; }
+</style>
+
+<h1>Impression v2 — Screens</h1>
+<div class="sub">
+  390×810. Three states from Figma page 63:6427. The large dial is inert until a capture
+  exists. Everything is live — turn the dials, tap the aperture, capture.
+</div>
+
+<div class="row" id="row"></div>
+
+<script type="module">
+import { Screen } from './src/ui/Screen.ts';
+import { SHAPES } from './src/ui/field.ts';
+import { SoundConfig } from './src/ui/SoundConfig.ts';
+
+// ── glyph mask + four-level quantiser (same model as the harness) ──
+const GLYPHS = {
+  A: [[[.5,.03],[.985,.97],[.80,.97],[.685,.70],[.315,.70],[.20,.97],[.015,.97]],
+      [[.5,.22],[.625,.545],[.375,.545]]],
+};
+const inPoly=(px,py,poly)=>{let c=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){const[xi,yi]=poly[i],[xj,yj]=poly[j];
+    if(((yi>py)!==(yj>py))&&(px<(xj-xi)*(py-yi)/(yj-yi)+xi))c=!c;} return c;};
+const inGlyph=(ch,u,v)=>{const g=GLYPHS[ch]; if(!g) return false;
+  if(!inPoly(u,v,g[0])) return false;
+  for(let i=1;i<g.length;i++) if(inPoly(u,v,g[i])) return false; return true;};
+
+const M=64, mat=new Float32Array(M*M);
+{ let s=1337; for(let i=0;i<M*M;i++){ s=(s*1664525+1013904223)>>>0; mat[i]=s/4294967296; } }
+const thr=(x,y)=>mat[(((y%M)+M)%M)*M+(((x%M)+M)%M)];
+
+function buildField(gw, lit) {
+  const gh = Math.round(gw*1.25);
+  const cells = new Int8Array(gw*gh).fill(-1);
+  for (let r=0;r<gh;r++) for (let c=0;c<gw;c++){
+    const u=(c+.5)/gw, v=(r+.5)/gh;
+    if(!inGlyph('A',u,v)) continue;
+    const grad = 1-(u*0.35+v*0.65);
+    // Gain 1.40, not 0.84. At 0.84 the value range topped out at 0.742 while
+    // level 4 needs val >= ~0.75, so this page emitted ZERO squares — it showed
+    // a three-shape halftone for a four-shape product, and every visual review
+    // run against it judged the wrong image. Measured at gain 1.40 / lit 0.72:
+    // square 114, circle 239, diamond 215, cross 90.
+    // Deliberately NOT tuned to an even 25/25/25/25 split: real captures are
+    // cross- and square-weighted with a thin middle (V3 §5.6 measured cross 57 /
+    // circle 42 / diamond 14 / square 6 of 119 runs), so an evened-out demo
+    // would misrepresent the product in the opposite direction.
+    const val = lit + (grad-0.5)*1.40;
+    const lvl = Math.max(0, Math.min(4, Math.floor(val*4 + thr(c,r))));
+    if (lvl>0) cells[r*gw+c] = 4-lvl;      // lvl4 -> square (darkest)
+  }
+  return { cells, gridWidth:gw, gridHeight:gh };
+}
+
+const row = document.getElementById('row');
+const states = [
+  ['Rest — before capture', 'rest', false],
+  ['Captured — large dial live', 'captured', false],
+  ['Rest — Auto Level open (63:6462)', 'rest', true],
+  // 63:6436. The v2 handoff never documented this screen, so it had no code
+  // path: Auto Level open while a capture exists.
+  ['Captured — Auto Level open (63:6436)', 'captured', true],
+];
+
+for (const [caption, phase, openAuto] of states) {
+  const cell = document.createElement('div'); cell.className='cell';
+  const s = new Screen({
+    onCapture: () => { s.setPhase('captured'); cap.textContent = 'captured'; },
+    onBackToLive: () => { s.setPhase('rest'); cap.textContent = 'back to live'; },
+    onParam: (k,v) => { cap.textContent = `${k} = ${v.toFixed(2)}`; },
+    onSoundOpen: () => { cap.textContent = 'sound config'; },
+  });
+  const cap = document.createElement('div'); cap.className='cap'; cap.textContent = caption;
+  cell.append(s.el, cap);
+  row.appendChild(cell);
+
+  s.setPhase(phase);
+  s.draw(buildField(44, 0.72));
+  if (openAuto) {
+    s.bar.setOpen(true);
+    const ov = s.bar.el.querySelector('.auto-level');
+    ov.style.transition='none';   // preview tab throttles transitions
+    s.bar.el.querySelector('.utility-bar__icon').classList.add('is-on');
+  }
+  if (phase==='captured') s.large.setPosition(0.35);
+}
+
+// ── sound config ────────────────────────────────────────────
+{
+  const cell = document.createElement('div'); cell.className='cell';
+  const cap = document.createElement('div'); cap.className='cap';
+  cap.textContent = 'Sound config — turn either wheel';
+  const sc = new SoundConfig({
+    onPreview: (shape, profile) => { cap.textContent = `${shape} → ${profile}`; },
+    onSave: () => { cap.textContent = 'saved'; },
+    onExit: () => { cap.textContent = 'exited'; },
+  });
+  cell.append(sc.el, cap);
+  document.getElementById('row').appendChild(cell);
+}
+</script>

@@ -1,0 +1,1166 @@
+/*
+  Component styles. Every dimension here is read from Figma
+  (file FY8AMjl9gLCavqWjLsWxLv, page 63:6427) — not chosen, not rounded.
+*/
+
+/* ── Mini dial · node 62:4972 ───────────────────────────────
+   79px circle, grey fill AND grey 1px border (the border is in the design;
+   it makes the edge read cleanly against black). Content is space-between
+   with 8px top / 16px bottom padding, so the readout sits above centre. */
+
+.mini-dial {
+  position: relative;
+  width: var(--mini-dial);
+  height: var(--mini-dial);
+  border-radius: 1000px;
+  background: var(--grey);
+  border: 1px solid var(--grey);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 16px;
+  overflow: clip;
+  touch-action: none;          /* the dial owns the gesture, not the page */
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.mini-dial.is-active { cursor: grabbing; }
+
+/* Disabled while a capture exists, for the params that cannot act on one
+   (see Screen.setPhase). Uses the SAME two-direction treatment the large dial
+   carries at :121-129 — fill darkens to `colour/dim`, marks lighten to `dim` —
+   so the app has one disabled language rather than two. Deliberately NOT an
+   opacity fade: that is what the dead v1 stylesheet was doing to the large dial
+   (crushing it to 1.18:1), and the design's move is a contrast change, not a
+   transparency one. */
+.mini-dial.is-disabled {
+  background: var(--grey-disabled);
+  border-color: var(--grey-disabled);
+  cursor: not-allowed;
+}
+.mini-dial.is-disabled .mini-dial__readout,
+.mini-dial.is-disabled .mini-dial__label { color: var(--ink-disabled); }
+.mini-dial.is-disabled .mini-dial__dot { background: var(--ink-disabled); }
+
+/* The aperture button and letter-step buttons follow the same rule. */
+.utility-bar__icon:disabled,
+.utility-bar__step:disabled { color: var(--grey-disabled); cursor: not-allowed; }
+/* Focus indicator — WCAG 1.4.11 needs 3:1 against ADJACENT colours, and
+   `--accent` on the grey dial face is only 1.25:1 (it is 7.00:1 on black).
+   With `outline-offset` the ring straddles the face/background boundary, so
+   the half over the grey was effectively invisible. The `box-shadow` lays a
+   black halo just outside the ring: the orange always has a dark neighbour,
+   whichever ground it crosses. Applied to every focusable control. */
+.mini-dial:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--bg);
+}
+
+/* The dot orbits the centre. Transform-origin is the dial's centre, which is
+   35.5px below the dot's own centre (79/2 − 4/2 = 37.5, less 2px top pad).
+
+   Node 62:4968 fills this PURE BLACK — not `--ink`. The large dial's dot
+   (62:5080) genuinely is `--ink` #14110f, so the two dials differ by design
+   and must not be unified. Read from raw node fills; codegen resolved both
+   to the same token. */
+.mini-dial__dot {
+  width: var(--dial-dot);
+  height: var(--dial-dot);
+  border-radius: 50%;
+  background: var(--bg);
+  flex-shrink: 0;
+  /* Rotate about the FACE's centre, derived rather than hardcoded.
+     The dial renders 75px (not the design's 79 — see `.controls-grid`), so a
+     fixed constant is wrong at any size. From the dot's own centre the face
+     centre is: half the content box, plus the 8px top padding, less the dot's
+     2px half-height. A previous `33.5px` made the orbit eccentric by 10px —
+     radius swung 26.5→36.5 and the dot crossed the 37.5px bezel and clipped. */
+  /* NOTE: percentages here resolve against the DOT (4px), not the face, so
+     this must be an absolute length. Face renders 75px with 8px top padding,
+     so the dot's centre sits 8 + 1 = 9px down (the 1px border shifts it) and
+     the face centre is 37.5px down: the origin is 37.5 − 9 = 28.5px below the
+     dot's own centre. Measured: this puts the resolved origin on (37.5, 37.5)
+     exactly, giving a concentric orbit that clears the bezel at every angle. */
+  transform-origin: 50% 28.5px;
+  transition: transform .05s linear;
+}
+
+.mini-dial__content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: stretch;
+  width: 100%;
+  text-align: center;
+  word-break: break-word;
+}
+
+.mini-dial__readout {
+  margin: 0;
+  font-size: 13px;
+  line-height: normal;
+  letter-spacing: var(--readout-tracking-13);
+  color: var(--bg);            /* readout is BLACK on grey, not ink */
+  font-variant-numeric: tabular-nums;
+}
+
+.mini-dial__label {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 11px;
+  line-height: normal;
+  letter-spacing: var(--label-tracking-11);
+  color: var(--ink);
+}
+
+/* ── Large dial · nodes 62:5042 / 62:5079 ───────────────────
+   170px. Padding 16px vertical / 24px horizontal, 24px control gap. */
+
+.large-dial {
+  position: relative;
+  width: var(--large-dial);
+  height: var(--large-dial);
+  border-radius: 1000px;
+  background: var(--grey);
+  border: 1px solid var(--grey);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  overflow: clip;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.large-dial.is-disabled {
+  background: var(--grey-disabled);
+  border-color: var(--grey-disabled);
+  cursor: not-allowed;
+}
+.large-dial.is-disabled .large-dial__icon,
+.large-dial.is-disabled .large-dial__speed { color: var(--ink-disabled); }
+.large-dial.is-disabled .large-dial__dot { background: var(--ink-disabled); }
+/* Disabled inverts the ring: marks LIGHTEN to `dim` while the fill darkens. */
+.large-dial.is-disabled .large-dial__ring path { stroke: var(--ink-disabled); }
+
+.large-dial__ring {
+  position: absolute;
+  inset: 2px;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  pointer-events: none;
+}
+.large-dial__ring path { stroke: var(--ink); stroke-width: 1; fill: none; }
+
+.large-dial__dot {
+  width: var(--dial-dot);
+  height: var(--dial-dot);
+  border-radius: 50%;
+  background: var(--ink);
+  flex-shrink: 0;
+  /* Rotation centre = the DIAL's centre, expressed relative to the dot.
+     The dot is 4px, sits at the top of a 170px face whose vertical padding is
+     16px, so its own centre is 16 + 2 = 18px down, and the dial centre is 85px
+     down: the origin is 85 − 18 = 67px below the dot's centre.
+     The old `50% 79px` was computed against a 4px padding that does not exist
+     (the face is `padding: 16px 24px`), so the dot orbited a point 12px below
+     the true centre and swung outside the face. Measured radius is 66–67px,
+     which is what this now matches. */
+  transform-origin: 50% 67px;
+  transition: transform .05s linear;
+}
+
+.large-dial__control {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.large-dial__icon {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  width: var(--icon);
+  height: var(--icon);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  cursor: pointer;
+}
+.large-dial__icon:disabled { cursor: not-allowed; }
+.large-dial__icon.is-on { color: var(--accent); }
+.large-dial__icon:focus-visible,
+.large-dial__speed:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 7px var(--bg);
+}
+
+.large-dial__speed {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  width: var(--icon);
+  height: 18px;
+  font-size: 16px;
+  letter-spacing: var(--readout-tracking-16);
+  color: var(--ink);
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.large-dial__speed:disabled { cursor: not-allowed; }
+
+/* The bottom spacer in the Figma component — keeps the control row optically
+   centred given the dot occupies the top slot. */
+.large-dial::after {
+  content: '';
+  width: var(--dial-dot);
+  height: var(--dial-dot);
+  flex-shrink: 0;
+}
+
+/* ── Buttons · node 62:5700 ─────────────────────────────────
+   358px wide, radius 24px, padding 16px 40px. Height is NOT declared in the
+   design — 16px padding + a 24px icon computes to 56px. Three types: filled,
+   outlined, icon.
+   The Clicked state LIGHTENS to `colour/hair` (#d9d4ca); it does not darken. */
+
+.btn {
+  appearance: none;
+  /* Height is NOT declared — the design's auto-layout computes it from
+     padding + a 24px icon. Figma draws the 1px border OUTSIDE that box, so to
+     land on 56 total the vertical padding absorbs the border: 15 + 24 + 15 + 2
+     = 56. Horizontally the design's 40px is measured the same way, hence 39. */
+  border-radius: 24px;
+  border: 1px solid transparent;
+  color: var(--ink);
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: var(--label-tracking-11);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 15px 39px;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+.btn--full { width: 100%; }
+.btn--filled {
+  background: var(--grey);
+  border-color: var(--grey);
+  color: var(--ink);
+}
+.btn--outlined {
+  background: transparent;
+  border-color: var(--grey);
+  color: var(--grey);
+}
+/* No width and no padding override: an icon button hugs the generic
+   `padding: 15px 39px` around its 24px icon, which computes to 104.
+   Nodes 63:6524/63:6526 carry NO fill — only the middle save button is
+   filled. `background: none` is required because the base `.btn` no longer
+   sets one, and a bare <button> would otherwise show the UA's default grey. */
+.btn--icon {
+  flex: 0 0 auto;
+  background: none;
+  border-color: transparent;
+  color: var(--grey);
+}
+.btn--filled:active:not(:disabled) {
+  background: var(--hair);
+  border-color: var(--hair);
+}
+.btn--outlined:active:not(:disabled) {
+  border-color: var(--hair);
+  color: var(--hair);
+}
+.btn:disabled {
+  background: var(--grey-disabled);
+  border-color: var(--grey-disabled);
+  color: var(--ink-disabled);
+  cursor: not-allowed;
+}
+.btn--outlined:disabled { background: transparent; color: var(--grey-disabled); }
+/* Buttons sit on the control group's `--ink` surface, not on `--bg`, so the
+   halo uses that ground. Accent on `--ink` is already 6.5:1; the halo exists
+   so the ring stays legible where it crosses the button's own grey fill. */
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--ink);
+}
+/* `display: block` is load-bearing: an inline SVG carries baseline leading,
+   which added 2px and rendered the sound-config footer buttons at 58px against
+   the design's 56. The capture button escaped it only because its SVG is a
+   direct flex child and got blockified; the footer wraps its icon in a span,
+   so the SVG stayed inline. */
+.btn svg { width: var(--icon); height: var(--icon); display: block; }
+
+/* ── Utility bar · nodes 62:5813 (collapsed) / 62:6144 (expanded) ──
+   The bar is 390x40 in BOTH variants — it does not grow. The Auto Level panel
+   floats above it (y=-108, height 132) rather than pushing it open. What
+   actually differs between the two: the panel is 326px wide collapsed and
+   310px expanded, and the right icon moves x=366 → x=350. */
+
+.utility-bar {
+  position: relative;
+  width: var(--screen-w);
+  height: var(--utility-h);
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 16px 16px;
+  /*
+    Above the control group.
+
+    The Auto Level panel is a CHILD of this bar, and z-index inside an element
+    cannot lift it past a LATER SIBLING of that element — `.screen__controls`
+    is `position: relative` and comes after the bar in the flex column, so it
+    painted over the open panel no matter what `.auto-level` asked for. Raising
+    the bar itself is what actually reorders them.
+
+    4, not 3: `.utility-bar__icon` already uses 3 for its own marks.
+  */
+  z-index: 4;
+}
+/* The bar height NEVER changes — 62:5813 and 62:6144 are both 390x40. The
+   Auto Level panel OVERLAYS the stage (the node sits at y=-108, i.e. above
+   the bar's own box); it does not open the bar and must not displace the
+   canvas. An earlier `.is-open { height: 148px }` grew this flex child by
+   108px, stealing that height from the stage and shoving the letter upward. */
+
+/* The letter readout is now a LIVE REGION ONLY — visually hidden.
+   The ‹ A › buttons that used to sit here were replaced by the invert icon
+   (node 102:622). The letter still has to be ANNOUNCED when it changes, or a
+   screen-reader user swiping or arrowing gets no feedback at all. Clipped
+   rather than `display: none`, which would remove it from the a11y tree and
+   silence the announcement. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The stage takes arrow keys for letter selection (WCAG 2.1.1), so it is
+   focusable and needs a visible ring. Inset because the stage is full-bleed —
+   an outset ring would be clipped by the frame. */
+.screen__stage:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+
+.utility-bar__icon {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  width: var(--icon);
+  height: var(--icon);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--grey);
+  cursor: pointer;
+  position: relative;
+  z-index: 3;
+}
+.utility-bar__icon.is-on { color: var(--accent); }
+/*
+  The aperture stays above the open panel — it is the control that closes it,
+  and the panel covers the whole bar. `is-open` is set on the bar itself, so
+  this only lifts the aperture while the panel is actually up; the other four
+  icons stay underneath, which is the design.
+*/
+.utility-bar.is-open .utility-bar__icon[aria-expanded] { z-index: 6; }
+.utility-bar__icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 7px var(--bg);
+}
+
+/* ── Auto Level · node 62:6071 ─────────────────────────────
+   Read from the node, not eyeballed:
+     panel     326 x 132, radius 40, TRANSPARENT fill
+     glow      inset 0 0 40px 26px rgba(138,131,119,0.2)
+     layout    column, justify-end, gap 24px, py 16px
+     number    flex 1, column, gap 4px  (dot 4px + readout)
+     readout   Bitcount LIGHT 16px, accent, tracking 2.56px
+     rail      12px tall, justify-between, full width
+     ticks     1px wide. Pattern across the rail is
+               [12,8] x6, then 16, 32, 16, then [12,8] x6, then 12
+     label     Tenon 11px, #5b544b, tracking 1.76px           */
+
+/* Node 62:6071 — 326x132, floating ABOVE the 40px bar (the node's own y is
+   -108 relative to it) so it overlays the stage rather than opening the bar.
+   `bottom: 8px` puts its foot 8px up from the bar's base; with height 132 the
+   top 100px sit over the canvas. */
+/* Placed at the node's OWN coordinates inside the 390x40 bar, not centred:
+   `x: 40, y: -108, h: 132` (62:6146). Its bottom therefore lands at y=24 —
+   level with the TOP of the 24px icons, which is what opens the clear space
+   between the panel and the control group below. Centring it put the panel at
+   x=32/y=-100, 8px low and 8px left, closing that gap. */
+.auto-level {
+  position: absolute;
+  /*
+    CENTRED, not pinned to the node's x=40.
+
+    The design places this at x=40 in a 390 frame, which is centred only
+    because 40 + 310 + 40 = 390. The frame is now `100vw` on phones, so a
+    literal 40 leaves the panel off-centre on any other width — 20px left of
+    centre on a 430 Pro Max, and further out as screens widen.
+
+    `left: 50%` + `translateX(-50%)` reproduces the design exactly at 390 and
+    stays centred everywhere else. `max-width` keeps it inside a narrow frame
+    (SE is 375, so a fixed 310 plus margins would crowd the edges).
+  */
+  left: 50%;
+  transform: translateX(-50%);
+  top: -108px;
+  width: min(310px, 100% - 32px);
+  height: 132px;
+  border-radius: 40px;
+  /* Fill is #000 at 0.4% — effectively nothing, but NOT `transparent`: it is
+     what the glass blur tints. Read from the node's raw fills; the generated
+     code reports it as flat `rgba(0,0,0,0)` and loses the alpha. */
+  background: rgba(0, 0, 0, 0.004);
+  /* THE GLASS — node 62:6071's full effect, which the Plugin API exposes as:
+       radius 22 · refraction 0.8 · depth 100 · dispersion 1 · splay 1
+       lightAngle 225° · lightIntensity 0.4
+     Figma's codegen emits NONE of this; it reports only the inner shadow.
+
+     CSS has no refraction or dispersion, so `Frost` (radius 22) maps to the
+     backdrop blur and the light is reproduced by the edge treatment below.
+     `saturate` compensates for the colour that a plain blur flattens — the
+     dot field behind is near-monochrome, so this stays subtle. */
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  backdrop-filter: blur(22px) saturate(1.4);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 24px;
+  padding: 16px 0;
+  overflow: clip;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease;
+  touch-action: none;
+  /*
+    ABOVE the bar's own icons.
+
+    The panel and the icons are siblings inside `.utility-bar`, and
+    `.utility-bar__icon` sits at `z-index: 3`. At 2 the panel painted UNDER
+    every icon: the aperture, mask, sound and speaker marks showed through the
+    open glass, which is what the design does not do.
+
+    The aperture button is lifted back above this (see `.utility-bar__icon
+    .is-on` below) because it is the control that CLOSES the panel — burying it
+    under the thing it toggles would trap the user.
+  */
+  z-index: 5;
+}
+/* The inner shadow rides ABOVE the blurred backdrop — it is the second of the
+   node's two effects, not the panel's substance.
+
+   The 1px inset ring is the GLASS effect's light, not an invention:
+   `lightAngle 225°` puts the source top-left, `lightIntensity 0.4` sets how
+   hot the lit edge reads. A 225° gradient lights the top-left rim and lets
+   the bottom-right fall away, which is what gives the panel a thickness that
+   a flat blur cannot. */
+.auto-level::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 40px 26px rgba(138, 131, 119, 0.2),
+    inset 1px 1px 0 0 rgba(242, 240, 237, 0.16),
+    inset -1px -1px 0 0 rgba(0, 0, 0, 0.32);
+}
+.utility-bar.is-open .auto-level { opacity: 1; pointer-events: auto; }
+/* `:focus` is suppressed because the panel takes programmatic focus whenever
+   it opens by pointer — a ring there would fire on every mouse click. But it
+   is keyboard-operable (arrows, Escape), so `:focus-visible` must still show. */
+.auto-level:focus { outline: none; }
+.auto-level:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Number block: flex-1 so it takes the space above the rail. */
+.auto-level__number {
+  flex: 1 0 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+.auto-level__dot {
+  width: var(--dial-dot);
+  height: var(--dial-dot);
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.auto-level__value {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 300;              /* Bitcount Light */
+  line-height: normal;
+  letter-spacing: var(--readout-tracking-16);
+  color: var(--accent);
+  text-align: center;
+  width: 100%;
+}
+
+/* Rail — node 62:6039. The frame itself is 12px tall, but its children
+   overflow to y=-10…22: a 32px band centred on the same axis, so the centre
+   marker can stand proud of the 8/12px ticks. The box must therefore be 32px
+   and still clip HORIZONTALLY, or the marker is sliced to 12px. */
+.auto-level__rail {
+  position: relative;
+  width: 100%;
+  height: 32px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+/* Ticks are absolutely placed at `rep * PERIOD_W + i * PITCH` by the
+   component, which also sets this element's width inline. Do NOT restore
+   `display: flex` — it collapses every absolutely-positioned tick onto x=0. */
+.auto-level__rail-inner {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  height: 32px;
+  margin-top: -16px;
+  will-change: transform;
+}
+/* `bottom: 0` seats every tick on a common baseline, matching the node where
+   the 8px and 12px ticks share a bottom edge and the marker grows upward. */
+.auto-level__tick {
+  position: absolute;
+  bottom: 0;
+  width: 1px;
+  background: var(--grey);
+}
+.auto-level__tick--accent { background: var(--accent); }
+
+/* The fixed centre marker. Pinned to the rail's midpoint and OUTSIDE the
+   scrolling strip, so the orange trio always marks the current value while
+   the ticks stream past it. `left: 50%` puts the middle 32px rule dead
+   centre; the two 16px flanks sit ±1 pitch from it. */
+.auto-level__centre {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.auto-level__label {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 11px;
+  line-height: normal;
+  letter-spacing: var(--label-tracking-11);
+  color: var(--grey-disabled);   /* colour/dim #5b544b */
+  text-align: center;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* ── Screen · nodes 63:6443 / 63:6429 / 63:6462 / 63:6436 ───
+   390x810 in three bands. NONE of the band heights are declared in the design:
+   the stage is `flex-[1_0_0]` and the control group is an auto-layout column
+   that computes to 274 (16 + 170 + 16 + 56 + 16). The old 496/274 constants
+   were reconstructions of numbers the layout already produces. */
+
+.screen {
+  position: relative;
+  width: var(--screen-w);
+  height: var(--screen-h);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* The letter is the SUBJECT and fills the stage edge to edge.
+   Node 63:6444 insets its vector by 24px, but that frame is a mock whose
+   letter is a static illustration; here the dot field IS the product, and the
+   inset only made it small. The canvas takes the whole stage and `field.ts`
+   letterboxes the grid inside it, so nothing is ever clipped. */
+.screen__stage {
+  position: relative;
+  width: 100%;
+  flex: 1 0 0;
+  min-height: 0;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  /* Claim the horizontal axis for the letter swipe; leave the vertical one to
+     the page so the app can still be scrolled on a phone. */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Fill the stage. `field.ts` letterboxes the 4:5 grid inside whatever box it
+   is given, so a full-bleed canvas means the letter is as large as the stage
+   allows with no clipping. */
+.screen__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* The control group is NOT on --bg. It is `colour/ink` (#14110f) with 24px
+   top corners — a second surface, the same token used for marks on grey. */
+.screen__controls {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  flex-shrink: 0;
+  background: var(--ink);
+  border-radius: 24px 24px 0 0;
+}
+
+/* Large dial left, 2x2 mini grid right, across 358px.
+
+   `min(358px, 100%)` rather than a hard 358: the design's 358 assumes a 390
+   frame, which is exactly one device wide. On an iPhone SE (375) a fixed 358
+   overflows the control group's content box and `body { overflow: hidden }`
+   clips the right edge SILENTLY — no scrollbar, just a truncated capture
+   button and mini-dial column.
+
+   `100%`, not `100% - 32px`: the parent `.screen__controls` already pads 16px
+   on each side, so 100% IS the padded content box. Subtracting the padding
+   again double-counts it — measured, that gave 326px on a 390 frame where the
+   design says 358. */
+.controls-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  width: min(358px, 100%);
+}
+
+/* 166px wide: two 79px dials with an 8px gap would be 166, but the design
+   specifies 16px column gap and stretches the cells — so the dials render
+   slightly wider than 79 here. Grid gaps are 16 across / 20 down. */
+.controls-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 16px;
+  width: 166px;
+  flex-shrink: 0;
+}
+.controls-grid .mini-dial { width: 100%; height: auto; aspect-ratio: 1; }
+
+/* Flows as the second child of the control column — the design's 16px gap
+   below the controls row puts it at y=202 without being told to. */
+/* The capture row — Figma 106:778: a 56px square flip button, 16px gap, then
+   the capture button taking the remainder. When the flip button is hidden the
+   row collapses to a single full-width button, which is exactly the captured
+   state at 63:6429 — no separate rule needed for that case. */
+.screen__capture-row {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+  width: min(358px, 100%);
+  flex-shrink: 0;
+}
+
+/* Square, outlined, hugging its 24px icon: 16px padding + 24 + 16 = 56.
+   `padding: 15px` not 16 because `.btn` draws a 1px border inside the box. */
+.screen__flip {
+  flex: 0 0 auto;
+  width: 56px;
+  padding: 15px;
+}
+.screen__flip[hidden] { display: none; }
+
+/* Takes whatever the flip button leaves. `min-width: 0` so a flex child with
+   an intrinsic width cannot push the row wider than the frame. */
+.screen__capture {
+  flex: 1 0 0;
+  min-width: 0;
+}
+
+/* ── Reel · node 23:783 ────────────────────────────────────
+   A film reel. The face is an SVG path from the design with four spoke wells
+   cut out of it; a black spindle sits at the hub and does not rotate. Labels
+   live inside the wells and turn WITH the reel — upside down at the top,
+   bottom-up at the bottom. That is the design, not a bug. */
+
+.reel {
+  position: relative;
+  width: 334px;
+  height: 334px;
+  border-radius: 50%;
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  flex-shrink: 0;
+  /* NO background. The wells are REAL HOLES — the `Subtract` path is a circle
+     with four wells punched out of it, so whatever sits behind the reel shows
+     through. Painting a card colour here filled those holes with `#262523`,
+     which only LOOKED right against a dark ground: slide anything pale behind
+     the reel and the wells stayed dark instead of revealing it. */
+}
+.reel.is-active { cursor: grabbing; }
+.reel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 7px var(--bg);
+}
+
+.reel__face { position: absolute; inset: 0; }
+.reel__disc, .reel__ticks { position: absolute; inset: 0; width: 100%; height: 100%; }
+.reel__ticks line { stroke: var(--ink); stroke-width: 1; opacity: .45; }
+
+/* Node 23:1078 / 23:1313 `Ellipse 3` — a 138x138 hairline at x:98 y:98,
+   concentric with the 334px face (98 + 138 + 98 = 334).
+
+   This class had NO rule. `.reel__disc` and `.reel__ticks` above are both
+   `inset: 0` and fill the face, so the ring inherited `position: static` and
+   its `viewBox="0 0 138 138"` stretched to the 334x334 box — a 2.42x blowup
+   that put the ring at the rim instead of r=69, where `.reel { overflow:
+   hidden }` clipped most of it away. Explicit box, no `inset`. */
+.reel__inner-ring {
+  position: absolute;
+  left: 98px;
+  top: 98px;
+  width: 138px;
+  height: 138px;
+}
+
+/* The spindle: above the face, never rotates. */
+.reel__hub {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 62px; height: 62px;
+  margin: -31px 0 0 -31px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* A label sits at the well's centre and rotates with the reel. */
+/* The KEYSTONE well is cut by the disc's `Subtract` path — this box only
+   positions the label inside it. No background and no border-radius here:
+   drawing either turns the well back into a rounded button.
+   Unselected is `dim` #757575 (--ink-disabled), NOT the undefined --dim,
+   which silently inherited and washed the labels out. */
+/* No absolute geometry here. This rule used to carry `position: absolute;
+   left/top: 50%; width: 88px; margin: -8px 0 0 -44px` from the pre-rewrite
+   rotating-face design, all of it overridden inline by `Reel.ts`. Inert, but
+   only by accident — it would have re-broken every well the moment one of
+   those inline styles was dropped. `Reel.ts` owns where a slot sits; this rule
+   owns what it looks like. */
+.reel__slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transform-origin: 50% 50%;
+  color: var(--ink-disabled);
+  pointer-events: none;
+}
+.reel__slot.is-selected { color: var(--accent); }
+
+.reel__code {
+  font-family: var(--font-label);
+  font-size: 16px;
+  font-weight: 300;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  color: currentColor;
+}
+/* Instrument names are longer than the design's S.P.1–4 codes: RHODES measures
+   63.9px against a 48px well. Shrink only where needed — the shape reel's
+   two-letter codes keep the design's 16px. */
+.reel--variant2 .reel__code {
+  font-size: 12px;
+  letter-spacing: 0.2px;
+}
+/* Only the SQUARE swatch is drawn in CSS. The circle (Ellipse 6) and the
+   four-pointed star (Union) are real SVGs from `reelAssets.ts` — they carry
+   their own geometry and need no box behind them.
+
+   This rule used to be unscoped `.reel__swatch`, so `background: currentColor`
+   painted a solid 14px rounded rectangle behind BOTH SVG glyphs. `Reel.ts`
+   neutralises it inline today; scoping it to `--square` fixes it at source so
+   the inline override can eventually go.
+
+   There is deliberately no `.is-selected` variant. The old rule morphed a
+   selected square into a 16px circle — selection is a COLOUR change (the slot
+   flips to `--accent` and `currentColor` follows it), never a shape change.
+   Changing the mark's shape on selection means the swatch no longer identifies
+   which waveform the slot is, which is the one job it has. */
+.reel__swatch--square {
+  width: 14px; height: 14px;
+  border-radius: 2px;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.reel__swatch--circle, .reel__swatch--cross { flex-shrink: 0; }
+
+/* ── Sound config screen · node 63:6469 ─────────────────────
+   The two reels sit mostly OFF-SCREEN left and right: the frame is 733px wide
+   inside a 390px viewport, offset -171.5px. Only the inner arc of each wheel
+   is visible, which is the whole idea. */
+
+/* Node 63:6469 is an OVERLAY, not an opaque screen: fill `rgba(0,0,0,0.8)`
+   plus a GLASS effect. Figma's codegen reports the fill but drops the glass
+   entirely — the same omission that left the Auto Level panel flat.
+
+   Its glass params differ from the Auto Level panel's and are deliberately
+   plainer: radius 15 · refraction 1 · lightIntensity **0** · splay **0**.
+   Zero intensity means NO edge highlight — so this gets the blur alone, with
+   none of the rim lighting the panel carries. Do not copy that treatment here.
+
+   WHY THE FILL IS NOT 0.8 IN CSS. Figma's GLASS effect refracts the backdrop
+   and composites it ABOVE the layer fill — the fill sits behind the refracted
+   image. CSS `backdrop-filter` does the opposite: it blurs the backdrop and
+   then paints `background` flat ON TOP. So Figma's 0.8 and CSS's 0.8 are not
+   the same number in the same place, and copying the raw fill alpha across is
+   what killed the effect. Measured: an 0.8 black plate transmits only 20% of
+   the backdrop, so the 168-grey dial behind this screen survives at grey 34 —
+   below the ~grey-40 floor where an OLED panel still resolves detail. The
+   blur was running the whole time; it had nothing left to show, which is why
+   it read as a flat scrim with dirt in it rather than as glass.
+
+   0.62 transmits 38% (dial 168 → 64), which is where the blurred shapes
+   become legible AS shapes without competing with the reels. The `saturate`
+   is doing the job `refraction: 1` does in Figma — refracted glass carries
+   colour through, and a pure blur greys it out. */
+.sound-config {
+  position: relative;
+  width: var(--screen-w);
+  height: var(--screen-h);
+  background: rgba(0, 0, 0, 0.62);
+  -webkit-backdrop-filter: blur(15px) saturate(1.4);
+  backdrop-filter: blur(15px) saturate(1.4);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Node 63:6470 — the body: `layoutMode VERTICAL`, `itemSpacing 120`,
+   `padding 8 8 0 8`, `layoutGrow 1` (FILL/FILL), `counterAxis CENTER`.
+
+   This class was emitted by `SoundConfig.ts` and had NO rule in this file, so
+   it collapsed to a plain block div. That is the single defect behind BOTH
+   the dead space and the "missing" controls: with no flex context the reel
+   group could not be centred and the slider could not be spaced, so the
+   slider was rescued with `position:absolute; top:502px` — pinning it while
+   the reels floated to the top and leaving a 136px void between them. The
+   footer was never actually missing; the empty third of the screen above it
+   is what made the screen read as broken. */
+.sound-config__body {
+  flex: 1 0 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 120px;
+  padding: 8px 8px 0;
+}
+
+/* Node 63:6474 — reel group: VERTICAL, `itemSpacing 24`, counterAxis CENTER,
+   HUG on both axes. It is what holds the reel row and the slider together at
+   a fixed 24px, so neither needs to know where the other sits. */
+.sound-config__reel-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  width: 100%;
+}
+
+/* Node 63:6471 — FILL/HUG, `itemSpacing 8`, and NO padding of its own: the
+   8px inset comes from the body (63:6470), which already pads all four sides.
+   The old rule added `padding: 8px` on top of that and pinned `height: 32px`,
+   against a raw node that hugs to 16.5 (the 16.5px vector sets the height).
+   Those two together pushed everything below it down by 15.5px, which is the
+   offset that made the reel row and slider sit low against the design. */
+.sound-config__head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  flex-shrink: 0;
+  color: var(--grey);
+}
+/* Node 63:6473: 16px Tenon Light in `colour/grey`, no text-transform —
+   the design's glyphs are literally "SOUND CONFIG". */
+.sound-config__head p {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: 16px;
+  font-weight: 300;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--grey);
+  /* The row hugs to its TALLEST child, which is the 16.5px vector — not this
+     text. Left at `normal`, a 16px line box measures ~19px and became the
+     row's height, dragging everything below down 2.5px. The Figma text node
+     (63:6473) is 10px tall on a 16px glyph; matching the vector at 16.5 keeps
+     the row honest without clipping the cap height. */
+  line-height: 16.5px;
+}
+
+/* Node 63:6475 — 733x334, the two 334px wheels pinned at x=0 and x=399 so a
+   65px channel opens between them. The waveform is a CHILD of this row and is
+   centred on that channel, which is why it must be `position: relative`. */
+.sound-config__reels {
+  position: relative;
+  /* 733px of reel row inside a 390px viewport. The parent
+     (`.sound-config__reel-group`) is a flex column with `align-items: center`,
+     so this over-wide child is ALREADY centred on the group's box — the 65px
+     channel lands on the centreline for free.
+
+     The old `margin-left: -171.5px` was calibrated for a block parent whose
+     content box started at x=0. Against a centred flex parent it applied on
+     top of the centring and dragged the row 85.8px left, which is why the
+     left wheel fell off-screen and the waveform sat at x=109 instead of 195.
+     Centring is now the layout's job, not a constant's. */
+  width: 733px;
+  height: 334px;
+  flex-shrink: 0;
+}
+.sound-config__reel--left  { position: absolute; left: 0;     top: 0; }
+.sound-config__reel--right { position: absolute; left: 399px; top: 0; }
+
+/* Each wheel throws a shadow INWARD, toward the channel between them — so the
+   65px gap reads as a lit seam rather than a black gutter. The direction is
+   mirrored per side, which is why this cannot live on `.reel`. */
+/* Raw node effect on 23:783 / 23:1312: DROP_SHADOW radius 9.8, offset ±4,0.
+   Codegen reports `4.9px` because it halves Figma's blur for CSS box-shadow
+   semantics — but `filter: drop-shadow()` takes a standard deviation, so the
+   full 9.8 is correct here. Offsets are mirrored so each wheel casts away
+   from the channel between them. */
+.sound-config__reel--left  { filter: drop-shadow(4px 0 9.8px #000); }
+.sound-config__reel--right { filter: drop-shadow(-4px 0 9.8px #000); }
+
+/* The waveform between the wheels — its path never changes shape, only its
+   amplitude and phase, so the drawn identity is preserved by construction. */
+.sound-config__wave {
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 38px; height: 30px;
+  margin: -15px 0 0 -19px;
+  color: var(--accent);
+  z-index: 2;
+}
+
+/* Node 63:6479 — a flex column, not a block. The 24px gap replaces the
+   margin that used to hang off the meta row, and the 40px top padding is
+   what actually separates the slider from the wheels above it.
+
+   NOT absolutely positioned. It used to carry `position:absolute; top:502px`,
+   which was a symptom of `.sound-config__reel-group` having no rule: with no
+   flex parent to space it, the slider had to be nailed to a hardcoded y. The
+   raw node is `layoutPositioning: AUTO` — an ordinary flex child of 63:6474,
+   sized FIXED 390 / HUG. Restoring the parent's `gap: 24px` puts it at the
+   right y by construction, so the 502 constant is gone and the 136px void
+   above it closes.
+
+   The 390px width is negative margin, not `width:390px`: the parent body
+   carries `padding-inline: 8px` (node 63:6470) but this node is 390 wide and
+   sits at x=0 — it bleeds through that padding, and its own `padding-inline`
+   is what insets its contents to the same 374 the header uses. */
+.sound-config__slider {
+  position: relative;
+  width: var(--screen-w);
+  margin-inline: -8px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding-top: 40px;
+  padding-inline: 8px;
+  border-radius: 8px;
+}
+
+/* Node 63:6480 — full width, ends pushed apart. Height is left to the
+   content so the 16px type is not clipped by a 26px box. */
+.sound-config__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.sound-config__now {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-label);
+  font-weight: 300;
+  font-size: 16px;
+  color: var(--grey);
+}
+.sound-config__now b { font-weight: 300; color: var(--grey); }
+/* Node 63:6483 — a 2px ELLIPSE between the two codes, not a middot glyph.
+   Retained for any caller that still wants the neutral separator; the meta row
+   now uses the directional arrow below instead. */
+.sound-config__dot {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: var(--grey);
+  flex-shrink: 0;
+}
+
+/* Role captions. Deliberately quieter than the values they label — they exist
+   to name which wheel is the selector and which is the value, not to compete
+   with the reading. `--ink-disabled` is the same grey an unselected reel slot
+   uses, so the hierarchy matches the wheels themselves. */
+.sound-config__role {
+  font-size: 9px;
+  letter-spacing: 1.2px;
+  color: var(--ink-disabled);
+  flex-shrink: 0;
+}
+/* The arrow carries the direction of the relationship: shape → voice. */
+.sound-config__arrow {
+  color: var(--ink-disabled);
+  flex-shrink: 0;
+}
+
+/* Node 63:6485 — Bitcount Single at Light (300), not the 400 default. */
+.sound-config__pct {
+  border: 1px solid var(--grey);
+  border-radius: 100px;
+  padding: 8px 12px;
+  font-family: var(--font-readout);
+  font-size: 16px;
+  font-weight: 300;
+  color: var(--grey);
+}
+
+.sound-config__rail {
+  position: relative;
+  width: 100%;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  touch-action: none;
+  cursor: ew-resize;
+}
+/* Ticks are 1px hairlines alternating 12 and 8 tall, first and last both 12.
+   The height comes from the class, NOT an inline style — the markup emits
+   `.sound-config__tick` with `is-tall` on every even index. Selecting on the
+   bare `span` left them at height:auto, which in a flex row collapses to 0. */
+.sound-config__tick {
+  width: 1px;
+  height: 8px;
+  background: var(--grey);
+  opacity: .5;
+  flex-shrink: 0;
+}
+.sound-config__tick.is-tall { height: 12px; }
+.sound-config__knob {
+  position: absolute;
+  top: -8px;
+  width: 56px; height: 27px;
+  border-radius: 4px;
+  background: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  gap: 3px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+.sound-config__knob i {
+  width: 1px; height: 11px; background: var(--bg); display: block;
+}
+
+/* Node 63:6523 — items align to flex-START, and the top corners are rounded
+   like the main screen's control group.
+
+   An ordinary flex child, not absolutely positioned. The root (63:6469) is
+   `SPACE_BETWEEN` with the body at `layoutGrow 1`, so the body eats the slack
+   and the footer is pushed to the bottom by the layout itself. It measured
+   correctly at y=738 while absolute — but only because 810 − 72 happened to
+   agree; any change to the footer's height would have silently desynced it
+   from the body above. `flex-shrink: 0` is what actually guarantees the 72px
+   survives, which is the property the absolute version was faking. */
+.sound-config__foot {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 24px 24px 0 0;
+}
+/* The save button TAKES the remaining space; the icon buttons HUG their
+   `padding: 15px 39px`. In a 390 frame that computes to 104 / 150 / 104 —
+   the measurement is the result of this rule, not a value to hardcode. */
+.sound-config__foot .btn--save { flex: 1 0 0; min-width: 0; }
+
+/* Content wrapper inside a well. Carries the constant seat counter-rotation
+   so a west-seated reel's labels read forwards while the reel still turns. */
+.reel__inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* ── Reduced motion ─────────────────────────────────────────
+   Per the project constraint: `prefers-reduced-motion` must NOT remove the
+   feedback a transition carries, only its animation. Every transition here
+   communicates STATE — where a dial's dot sits, whether a panel is open,
+   which button is pressed — so each is reduced to an instant change rather
+   than cut. Removing them outright would delete the information.
+
+   `.reel__face` is deliberately untouched: its rotation is driven directly by
+   the pointer, not by a transition, so it is direct manipulation rather than
+   animation and is exempt.
+
+   The two motion hazards this file cannot reach — the playhead column flash
+   and the shutter flash — are gated in `main.ts`, which reads the media query
+   live at their call sites. */
+@media (prefers-reduced-motion: reduce) {
+  .mini-dial__dot,
+  .large-dial__dot,
+  .btn,
+  .auto-level {
+    transition-duration: 0.01ms !important;
+  }
+}

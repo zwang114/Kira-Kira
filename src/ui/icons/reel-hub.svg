@@ -1,0 +1,10 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="62" height="62" viewBox="0 0 62 62" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Frame 5">
+<rect width="62" height="62" rx="31" fill="black"/>
+<path id="Union" d="M34 19C34.5523 19 35 19.4477 35 20C35 23.866 38.134 27 42 27C42.5523 27 43 27.4477 43 28V34C43 34.5523 42.5523 35 42 35C38.134 35 35 38.134 35 42C35 42.5523 34.5523 43 34 43H28C27.4477 43 27 42.5523 27 42C27 38.134 23.866 35 20 35C19.4477 35 19 34.5523 19 34V28C19 27.4477 19.4477 27 20 27C23.866 27 27 23.866 27 20C27 19.4477 27.4477 19 28 19H34Z" fill="#8A8377"/>
+<path id="Line 4" d="M51.5075 10.4905L49.3862 12.6118" stroke="#8A8377" stroke-linecap="round"/>
+<path id="Line 5" d="M12.6167 49.3813L10.4953 51.5026" stroke="#8A8377" stroke-linecap="round"/>
+<path id="Line 6" d="M51.5145 51.5026L49.3932 49.3812" stroke="#8A8377" stroke-linecap="round"/>
+<path id="Line 7" d="M12.6236 12.6117L10.5023 10.4904" stroke="#8A8377" stroke-linecap="round"/>
+</g>
+</svg>

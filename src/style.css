@@ -1,0 +1,211 @@
+/*
+  Brutalist dark, carried over from glyph-studio's register: pure black, thin
+  white rules, monospaced numerals, one orange accent. The letter is the whole
+  composition — controls sit quietly at the edges and stay out of its way.
+*/
+
+:root {
+  color-scheme: dark;
+  --bg: #000;
+  --fg: #f2f0ed;
+  --dim: #6b6b6b;
+  --line: rgba(242, 240, 237, 0.16);
+  --accent: #ff6200;
+  --danger: #ff5a5a;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', system-ui, sans-serif;
+  font-weight: 300;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+#app { height: 100%; }
+
+.shell {
+  height: 100%;
+  display: grid;
+  /* `minmax(0, 1fr)` on the stage, not plain `1fr`. A bare 1fr row refuses to
+     shrink below its content's min-content height, so when the wrapped
+     controls grow taller than the viewport they push the canvas to height 0
+     and the letter disappears entirely. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+
+/* ── Header ─────────────────────────────────────────────── */
+
+.top {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.title {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.subtitle {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.04em;
+}
+.status {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  /* No webfont here on purpose: 'JetBrains Mono' used to head this stack with
+     no @font-face and no bundled file, so it could never resolve and every
+     reader of this file was misled about what actually renders. The platform
+     mono stack is what has always been drawing these numerals. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.status.error { color: var(--danger); }
+
+/* ── Stage ──────────────────────────────────────────────── */
+
+.stage {
+  position: relative;
+  /* The stage must be allowed to shrink; without this the canvas's intrinsic
+     size becomes a floor and the grid row overflows. */
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+canvas#view {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.overlay button { pointer-events: auto; }
+.hidden { display: none !important; }
+
+/* ── Controls ───────────────────────────────────────────── */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 22px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--line);
+  /* Never let the control strip eat the whole window. Past 45% of the viewport
+     it scrolls internally, so the letter always keeps the majority of the
+     screen — it's the subject, the controls are not. */
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.group > label {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.row { display: flex; align-items: center; gap: 8px; }
+
+.val {
+  /* No webfont here on purpose: 'JetBrains Mono' used to head this stack with
+     no @font-face and no bundled file, so it could never resolve and every
+     reader of this file was misled about what actually renders. The platform
+     mono stack is what has always been drawing these numerals. */
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  min-width: 4.2em;
+}
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 130px;
+  height: 1px;
+  background: var(--line);
+  outline: none;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--fg);
+  cursor: pointer;
+}
+input[type='range']::-moz-range-thumb {
+  width: 11px; height: 11px; border: 0; border-radius: 50%;
+  background: var(--fg); cursor: pointer;
+}
+
+button {
+  appearance: none;
+  background: transparent;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 7px 13px;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+button:hover:not(:disabled) { border-color: var(--fg); }
+button.on { background: var(--fg); color: #000; border-color: var(--fg); }
+button:disabled { opacity: 0.32; cursor: not-allowed; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+button.primary {
+  border-color: var(--fg);
+  padding: 9px 20px;
+}
+button.primary:hover:not(:disabled) { background: var(--fg); color: #000; }
+
+.seg { display: flex; }
+.seg button { border-right-width: 0; }
+.seg button:last-child { border-right-width: 1px; }
+
+input[type='text'] {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--fg);
+  font: inherit;
+  font-size: 15px;
+  text-align: center;
+  width: 46px;
+  padding: 5px 0;
+}
+input[type='text']:focus { outline: none; border-color: var(--fg); }
+
+.hint {
+  font-size: 11px;
+  color: var(--dim);
+  padding: 0 20px 14px;
+  min-height: 1.2em;
+}

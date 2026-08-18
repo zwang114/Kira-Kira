@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <!--
+    `viewport-fit=cover` is REQUIRED, not cosmetic: without it iOS never
+    reports safe-area insets and every `env(safe-area-inset-*)` silently
+    resolves to 0. The layout below subtracts those insets, so omitting this
+    would compute `100dvh - 0 - 0` and push the capture button under the home
+    indicator — a bug that only looks fixed when both are present.
+
+    `user-scalable=no` / `maximum-scale=1`: the stage is a drag surface (letter
+    swipe, dial scrub). Pinch-zoom on a viewfinder is never intended and
+    double-tap-to-zoom adds a 300ms delay to every tap.
+  -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Impression</title>
+
+  <!--
+    ADD TO HOME SCREEN.
+
+    iOS does NOT read the web app manifest for home-screen installs — it reads
+    these `apple-mobile-web-app-*` tags. Android/Chrome reads the manifest.
+    Both are present because they cover different platforms, not because either
+    is redundant.
+
+    `apple-mobile-web-app-capable: yes` is what makes the launched app
+    STANDALONE: no Safari chrome, no URL bar, no tab bar. That matters here
+    beyond aesthetics — the URL bar collapsing is what makes `100dvh` change
+    mid-use and forces `Screen.syncCanvas()` to reallocate the backing store.
+    In standalone there is no bar to collapse, so the stage height is stable
+    for the whole session.
+
+    `black-translucent` on the status bar style makes the web view extend UNDER
+    the status bar, which is what we want: `.app-root` already subtracts
+    `env(safe-area-inset-top)` and adds a matching `margin-top`, so the layout
+    accounts for the notch itself. With the default (`black`) iOS would inset
+    the view AND our CSS would inset it again, double-counting the notch.
+
+    The touch icon must be a real PNG at 180x180 — iOS will not use an SVG, and
+    it does not honour transparency (it composites onto white), which is why
+    the icon is drawn on an opaque black field rather than a transparent one.
+  -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Impression" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <style>
+    /*
+      Shell only. Everything inside `.screen` is styled by the v2 component
+      sheet (src/ui/components.css), which is finished and not touched here —
+      these rules centre that fixed 390x810 device frame in the viewport and
+      style the two things main.ts adds around it: the camera gate and the
+      sound-config overlay.
+    */
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: #000;
+      /*
+        FILL, do not centre.
+
+        This was `display: grid; place-items: center`, which centred a fixed
+        390x810 frame. On a phone that is wrong twice over: measured at
+        390x844, the frame rendered 810 tall with 17px of dead black above and
+        below, and the stage kept its desktop 496 rather than flexing. The old
+        `min(810px, 100dvh)` clamp only engaged BELOW 810 — every modern iPhone
+        viewport is above it, so on the target device the clamp did nothing at
+        all.
+      */
+      display: block;
+      overflow: hidden;
+      /* The app is a viewfinder, not a document: no rubber-banding, no
+         text-size inflation when the URL bar collapses. */
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+    }
+    /*
+      The frame fills the viewport, minus the safe areas.
+
+      HEIGHT: `100dvh` less the top inset (notch / Dynamic Island, 47pt on a
+      13 Pro) and the bottom inset (home indicator, 34pt). Without
+      `viewport-fit=cover` in the meta above these resolve to 0 and the capture
+      button ends up under the home indicator.
+
+      `dvh`, not `vh`: `vh` ignores Safari's collapsing URL bar. `dvh` does
+      change as the bar collapses, which resizes the stage mid-use — but
+      `Screen.syncCanvas()` reallocates the backing store and `lastDraw`
+      repaints, so it recovers rather than blanking. That churn is preferable
+      to `svh`, which would permanently sacrifice stage height to a bar that is
+      usually hidden.
+
+      WIDTH: `100vw`, not the design's fixed 390. 390 matches a 13 Pro by
+      coincidence. On a 15 Pro Max (430) a fixed frame leaves 20px black rails
+      down both sides, and on an SE (375) the frame is WIDER than the screen
+      and `overflow: hidden` clips the capture button's right edge silently.
+      The controls stay fixed regardless — `.controls-row` and
+      `.screen__capture` are hard 358px — so they simply centre in the extra
+      space. Letters cannot distort: `field.ts` uses `cell = min(w/gw, h/gh)`,
+      so cells are square by construction and a wider stage means a BIGGER
+      letter, never a stretched one.
+
+      `screens.html` is unaffected: this is scoped to `.app-root`, and that
+      gallery must stay at the design's 390x810 to compare against Figma.
+    */
+    .app-root {
+      position: relative;
+      --screen-w: 100vw;
+      --screen-h: calc(100dvh
+                       - env(safe-area-inset-top, 0px)
+                       - env(safe-area-inset-bottom, 0px));
+      margin-top: env(safe-area-inset-top, 0px);
+    }
+    /* Desktop keeps the device-frame presentation: the design's exact box,
+       centred. `pointer: fine` is the cleanest proxy for "not a touch phone". */
+    @media (pointer: fine) and (min-width: 480px) {
+      body { display: grid; place-items: center; }
+      .app-root {
+        --screen-w: 390px;
+        --screen-h: min(810px, 100dvh);
+        margin-top: 0;
+      }
+    }
+
+    /*
+      Below ~700px the 274px control group would take more than half the frame,
+      and the letter is the subject. The large dial is the only control with
+      slack — it houses three buttons plus a scrub surface in 170px and stays
+      above the 24px target floor at 140. The 56px capture button and the mini
+      dials are at their Figma sizes and near a11y floors, so they do not move.
+    */
+    @media (max-height: 700px) {
+      .app-root { --large-dial: 140px; }
+    }
+
+    /* The camera gate — the old `idle` phase, demoted to an overlay. It sits
+       OVER the stage rather than replacing it, so the mask preview stays
+       visible behind it. */
+    .gate {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 24px;
+      background: rgba(0, 0, 0, 0.55);
+      text-align: center;
+      transition: opacity 160ms ease;
+      z-index: 2;
+    }
+    .gate.is-hidden { opacity: 0; pointer-events: none; }
+    .gate__btn { width: auto; padding: 12px 20px; }
+    .gate__msg {
+      margin: 0;
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 10px;
+      line-height: 1.5;
+      letter-spacing: 0.04em;
+      color: #ff6200;
+      max-width: 260px;
+    }
+    .gate__msg:empty { display: none; }
+
+    /* Sound config covers the whole device frame — it is a screen, not a
+       panel. Same 390x810 box so the two never disagree on size.
+
+       `!important` because `.sound-overlay` is applied to the SAME element as
+       `.sound-config`, and `components.css:624` sets `position: relative` on
+       that class. Without it the overlay loses the cascade, lands in normal
+       flow at top:810, and stacks BELOW the app instead of covering it.
+
+       No `background` here: the panel carries its own `rgba(0,0,0,0.8)` and
+       `backdrop-filter: blur(15px)` from node 63:6469. Painting solid black
+       behind it would defeat the glass. */
+    .sound-overlay {
+      position: absolute !important;
+      inset: 0;
+      z-index: 5;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .gate { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

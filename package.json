@@ -1,0 +1,16 @@
+{
+  "name": "living-specimen",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && node scripts/make-sw.mjs",
+    "preview": "vite preview",
+    "serve": "vite preview --port 5180 --strictPort --host"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.3",
+    "vite": "^5.4.21"
+  }
+}
