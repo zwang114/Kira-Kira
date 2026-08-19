@@ -243,6 +243,7 @@ export class Session {
     // `setVoiceAssignments` rather than assigned directly, so stored data gets
     // the same id validation and level clamping as a live save — this is
     // user-editable storage and must not be trusted.
+    this.lastRenderedText = this.params.char;
     const saved = Session.loadAssignments();
     if (saved) this.setVoiceAssignments(saved);
   }
@@ -302,8 +303,13 @@ export class Session {
   }
 
   private mask() {
+    // Render the last inked text, so an empty field mid-edit does not blank
+    // the board. See `setText`.
+    const text = this.params.char.trim().length > 0
+      ? this.params.char
+      : this.lastRenderedText;
     return getTextMask({
-      text: this.params.char,
+      text,
       fontFamily: this.params.fontFamily,
       fontWeight: this.params.fontWeight,
       gridWidth: this.params.gridWidth,
@@ -988,26 +994,34 @@ export class Session {
   setText(text: string): void {
     const clamped = text.slice(0, MAX_CHARS);
     /*
-      THE LAST CHARACTER CANNOT BE DELETED.
+      AN EMPTY FIELD IS FINE. AN EMPTY CANVAS IS NOT.
 
-      An empty canvas is not a state worth reaching: with the stencil on and no
-      text there is nothing to look at, nothing to photograph and nothing to
-      play — the stage is simply black, and the only way out is to guess that
-      typing fixes it.
+      These are different things, and conflating them broke editing: an earlier
+      version refused the empty string outright, which made the last character
+      permanent — you could not clear "K" to type "sam" without K stuck in
+      front of it. The field must be fully editable.
 
-      Rejected HERE rather than in the input handler because this is the single
-      point every path goes through — keystroke, paste, dictation, autocorrect,
-      and any programmatic caller. Guarding the keystroke alone would let a
-      select-all-and-delete through, which is exactly how a user empties a
-      field in practice.
+      What must never happen is the CANVAS going blank, because the frame loop
+      cannot render a mask with no ink: it skipped the frame entirely, leaving
+      a stage that looked frozen with no way out but guessing.
 
-      `trim()` in the test, not `length`: a string of spaces rasterizes to
-      nothing, so it is empty for every purpose that matters here even though
-      it has characters in it.
+      So an empty string is accepted and stored, and the RENDER falls back to
+      the last text that actually had ink. Clear the field and the board keeps
+      showing "K" until you type "s"; type "sam" and it follows immediately.
     */
-    if (clamped.trim().length === 0) return;
+    if (clamped.trim().length > 0) this.lastRenderedText = clamped;
     this.setParam('char', clamped);
   }
+
+  /**
+   * The last text that had ink, which is what the mask actually renders.
+   *
+   * Kept separate from `params.char` on purpose: `char` is what the user has
+   * typed (and may briefly be empty mid-edit), while this is what the canvas
+   * shows. One is input state, the other is render state, and the whole bug was
+   * treating them as the same value.
+   */
+  private lastRenderedText = '';
 
   /** The current mask text, for a UI that wants to show it. */
   get text(): string { return this.params.char; }

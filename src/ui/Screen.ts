@@ -77,8 +77,6 @@ export class Screen {
   private textInput!: HTMLTextAreaElement;
   /** Mirrors the session's `masked` param — the keypad is pointless without it. */
   private maskOn = false;
-  /** Last non-empty text, restored if the user tries to empty the field. */
-  private lastAcceptedText = '';
 
   private captureBtn: HTMLButtonElement;
   private flipBtn!: HTMLButtonElement;
@@ -165,27 +163,12 @@ export class Screen {
       // `maxLength`, which the UA enforces only for typed keys.
       if (input.value.length > MAX_CHARS) input.value = input.value.slice(0, MAX_CHARS);
       /*
-        THE FIELD CANNOT BE EMPTIED.
-
-        The session rejects empty text — an empty stencil leaves a black stage
-        with no way out but guessing. The session is the source of truth, so
-        the field has to be put BACK rather than left empty: otherwise the
-        textarea reads "" while the mask still shows the last character, and
-        the next keystroke appends to a string the user cannot see. Two views
-        of one piece of state disagreeing is the failure this codebase has hit
-        more than any other.
-
-        Restoring from `lastAccepted` rather than blocking the keystroke means
-        select-all-and-delete is caught too, which is how a field actually gets
-        emptied in practice.
+        The field may be emptied freely — clearing it to retype is normal
+        editing. The SESSION decides what the canvas shows, and keeps rendering
+        the last inked text while the field is empty, so the board never goes
+        blank. Restoring the value here (an earlier attempt) made the last
+        character undeletable.
       */
-      if (input.value.trim().length === 0) {
-        input.value = this.lastAcceptedText;
-        // Put the caret at the end, or it jumps to the start on the next key.
-        try { input.setSelectionRange(input.value.length, input.value.length); } catch { /* not focused */ }
-        return;
-      }
-      this.lastAcceptedText = input.value;
       this.o.onTextChange?.(input.value);
     });
 
@@ -375,10 +358,7 @@ export class Screen {
    * it the first keystroke would replace KIRA/KIRA/KIRA wholesale, because the
    * input would have started empty while the mask displayed text.
    */
-  setText(text: string) {
-    if (this.textInput) this.textInput.value = text;
-    this.lastAcceptedText = text;
-  }
+  setText(text: string) { if (this.textInput) this.textInput.value = text; }
 
   /**
    * Mirror the session's mask state.
