@@ -271,8 +271,10 @@ export class Screen {
     let moved = false;
     let downAt: { x: number; y: number } | null = null;
     const TAP_SLOP_PX = 10;
+    let lastTapPoint: { x: number; y: number } | null = null;
     stage.addEventListener('pointerdown', (e) => {
       downAt = { x: e.clientX, y: e.clientY };
+      lastTapPoint = { x: e.clientX, y: e.clientY };
       moved = false;
     });
     stage.addEventListener('pointermove', (e) => {
@@ -298,6 +300,8 @@ export class Screen {
       // and a tap cannot be greyed out — so it is ignored instead.
       if (this.phase === 'captured') return;
       input.focus();
+      // Put the caret where the finger landed, not where it happened to be.
+      if (lastTapPoint) this.moveCaretTo(lastTapPoint.x, lastTapPoint.y);
     });
 
     // ── utility bar ──────────────────────────────────────
@@ -439,6 +443,65 @@ export class Screen {
    * input would have started empty while the mask displayed text.
    */
   setText(text: string) { if (this.textInput) this.textInput.value = text; }
+
+  /**
+   * Move the caret to the character nearest a tap.
+   *
+   * Without this the caret only ever sat where it was left, so a tap opened the
+   * keyboard but gave no way to choose WHERE to edit — you could append and
+   * backspace, and nothing else. Tapping a letter to correct it is the normal
+   * way to edit text on a phone.
+   *
+   * The tap arrives in CSS pixels on the stage; the layout is in grid cells.
+   * Both are converted through the same letterboxing `renderField` uses, so the
+   * character the user touched is the character they get — computing the
+   * geometry a second way here is exactly how it would drift.
+   */
+  private moveCaretTo(clientX: number, clientY: number) {
+    const layout = getTextLayout();
+    if (!layout.lines.length || !this.textInput) return;
+    const r = this.canvas.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+
+    // Same letterbox as the renderer: square cells, centred in the canvas.
+    const cell = Math.min(r.width / layout.gridWidth, r.height / layout.gridHeight);
+    const ox = (r.width - cell * layout.gridWidth) / 2;
+    const oy = (r.height - cell * layout.gridHeight) / 2;
+    const gx = (clientX - r.left - ox) / cell;
+    const gy = (clientY - r.top - oy) / cell;
+
+    // Nearest line by vertical distance to its band — a tap between lines, or
+    // outside the text entirely, still resolves to the closest one rather than
+    // doing nothing.
+    let bestLine = 0, bestDist = Infinity;
+    for (let i = 0; i < layout.lines.length; i++) {
+      const L = layout.lines[i];
+      const d = gy < L.top ? L.top - gy : gy > L.bottom ? gy - L.bottom : 0;
+      if (d < bestDist) { bestDist = d; bestLine = i; }
+    }
+
+    // Nearest caret slot within that line.
+    const line = layout.lines[bestLine];
+    let bestIdx = 0, bestDx = Infinity;
+    for (let k = 0; k < line.advances.length; k++) {
+      const dx = Math.abs(line.advances[k] - gx);
+      if (dx < bestDx) { bestDx = dx; bestIdx = k; }
+    }
+
+    /*
+      Convert the position within the RENDERED line back into an index in the
+      field's value. Wrapping can break a line where the value has a space, so
+      the two are not the same string — walking the earlier lines and their
+      separators is what keeps them in step.
+    */
+    let pos = 0;
+    for (let i = 0; i < bestLine; i++) pos += layout.lines[i].text.length + 1;
+    pos += bestIdx;
+    pos = Math.max(0, Math.min(this.textInput.value.length, pos));
+
+    try { this.textInput.setSelectionRange(pos, pos); } catch { /* not focusable yet */ }
+    this.repaint();
+  }
 
   /**
    * Repaint the last frame without changing it.
