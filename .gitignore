@@ -18,12 +18,9 @@ node_modules/
 .env.local
 .vercel
 
-# Tooling scratch — not part of the app
-gitinit.mjs
-commit.mjs
-remote.mjs
-push.mjs
-commit2.mjs
-addreadme.mjs
-cleanup.mjs
+# Tooling scratch — one-off git helpers, not part of the app.
+# A PATTERN, not a list: enumerating them meant each new helper leaked into the
+# repo before anyone noticed. Real build tooling lives in scripts/, which this
+# does not match.
+/*.mjs
 .claude-launch-note
