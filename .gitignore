@@ -23,4 +23,7 @@ gitinit.mjs
 commit.mjs
 remote.mjs
 push.mjs
+commit2.mjs
+addreadme.mjs
+cleanup.mjs
 .claude-launch-note
