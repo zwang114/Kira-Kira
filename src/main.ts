@@ -169,7 +169,7 @@ const screen = new Screen({
   */
   onMaskToggle: () => {
     session.setParam('masked', !session.params.masked);
-    screen.bar.setMasked(session.params.masked);
+    screen.setMasked(session.params.masked);
   },
 });
 
@@ -655,7 +655,7 @@ audio.setChimeMuted(true);
 screen.bar.setChimeMuted(audio.isChimeMuted());
 // The mask defaults off (session DEFAULTS), so seed the icon from the session
 // rather than assuming — one source of truth.
-screen.bar.setMasked(session.params.masked);
+screen.setMasked(session.params.masked);
 syncDialToSession();
 // …and the four mini dials, for the same reason: the session's DEFAULTS are
 // the single source, the dial faces are a view of them.

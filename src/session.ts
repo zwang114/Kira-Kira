@@ -143,7 +143,7 @@ const DEFAULTS: SessionParams = {
     The mask text. Up to MAX_CHARS characters, wrapped across up to 3 lines.
     Newlines are explicit breaks; everything else wraps on its own.
   */
-  char: 'KIRA\nKIRA\nKIRA',
+  char: 'KIRA\nKIRA',
   /*
     A BUNDLED condensed face — see the `@font-face` note in `tokens.css`.
 

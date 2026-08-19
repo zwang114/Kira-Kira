@@ -75,6 +75,8 @@ export class Screen {
   readonly bar: UtilityBar;
   readonly dials: Record<string, MiniDial> = {};
   private textInput!: HTMLTextAreaElement;
+  /** Mirrors the session's `masked` param — the keypad is pointless without it. */
+  private maskOn = false;
 
   private captureBtn: HTMLButtonElement;
   private flipBtn!: HTMLButtonElement;
@@ -164,33 +166,52 @@ export class Screen {
     });
 
     /*
-      TAP, NOT DRAG.
+      TAP TO TYPE — and the focus() must happen INSIDE the gesture.
 
-      The stage is still a drag surface, and a drag ending on it must not summon
-      a keyboard. Distinguish by movement: a tap barely moves. Without this,
-      any gesture over the letter would throw the keyboard up mid-interaction.
+      iOS only opens the keyboard when `focus()` is called synchronously from a
+      genuine user-gesture handler. The first version focused on `pointerup`
+      from a DOCUMENT-level listener, which is one step removed from the
+      gesture; every desktop browser accepted it and iOS silently ignored it —
+      the tap registered, the element focused, and no keyboard appeared.
+
+      `click` is the safest signal here: the UA synthesises it only for a real
+      tap (it already applies its own movement and timing rules), it is
+      unambiguously a user gesture, and it fires on the element rather than the
+      document. A pointermove threshold still suppresses drags, because the
+      stage is also a scrub surface and a drag ending on it must not summon a
+      keyboard.
     */
-    let down: { x: number; y: number; id: number } | null = null;
+    let moved = false;
+    let downAt: { x: number; y: number } | null = null;
     const TAP_SLOP_PX = 10;
     stage.addEventListener('pointerdown', (e) => {
-      if (down) return;
-      down = { x: e.clientX, y: e.clientY, id: e.pointerId };
+      downAt = { x: e.clientX, y: e.clientY };
+      moved = false;
     });
-    const endTap = (e: PointerEvent, commit: boolean) => {
-      if (!down || e.pointerId !== down.id) return;
-      const dx = Math.abs(e.clientX - down.x);
-      const dy = Math.abs(e.clientY - down.y);
-      down = null;
-      if (!commit) return;
-      if (dx > TAP_SLOP_PX || dy > TAP_SLOP_PX) return;   // a drag, not a tap
+    stage.addEventListener('pointermove', (e) => {
+      if (!downAt) return;
+      if (Math.abs(e.clientX - downAt.x) > TAP_SLOP_PX ||
+          Math.abs(e.clientY - downAt.y) > TAP_SLOP_PX) moved = true;
+    });
+    stage.addEventListener('click', () => {
+      const wasDrag = moved;
+      downAt = null;
+      moved = false;
+      if (wasDrag) return;
+      /*
+        NO KEYBOARD WHEN THE MASK IS OFF.
+
+        With the stencil off there is no letterform on screen — the stage is a
+        plain dithered camera view and the text edits nothing visible. Opening
+        a keyboard over it would be answering a question the user did not ask.
+      */
+      if (!this.maskOn) return;
       // Text is INVALIDATING: editing while frozen would discard the capture
       // silently. Every other invalidating control is disabled in this phase,
       // and a tap cannot be greyed out — so it is ignored instead.
       if (this.phase === 'captured') return;
       input.focus();
-    };
-    document.addEventListener('pointerup', (e) => endTap(e, true));
-    document.addEventListener('pointercancel', (e) => endTap(e, false));
+    });
 
     // ── utility bar ──────────────────────────────────────
     this.bar = new UtilityBar({
@@ -331,6 +352,20 @@ export class Screen {
    * input would have started empty while the mask displayed text.
    */
   setText(text: string) { if (this.textInput) this.textInput.value = text; }
+
+  /**
+   * Mirror the session's mask state.
+   *
+   * Drives the utility-bar icon AND the tap-to-type gate, from one call, so the
+   * icon and the keypad can never disagree about whether the stencil is on.
+   * Callers must use this rather than `screen.bar.setMasked` directly — routing
+   * around it would leave `maskOn` stale and the keyboard would open over a
+   * stage with no letterform on it.
+   */
+  setMasked(on: boolean) {
+    this.maskOn = on;
+    this.bar.setMasked(on);
+  }
 
   setPhase(p: Phase) {
     this.phase = p;
