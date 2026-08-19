@@ -29,7 +29,7 @@
 import { MiniDial } from './MiniDial';
 import { LargeDial } from './LargeDial';
 import { UtilityBar } from './UtilityBar';
-import { MAX_CHARS } from '../mask/rasterizeGlyph';
+import { MAX_CHARS, MAX_LINES } from '../mask/rasterizeGlyph';
 import { icon } from './icons';
 import { renderField, type Field } from './field';
 
@@ -149,6 +149,41 @@ export class Screen {
     input.setAttribute('autocorrect', 'off');
     input.setAttribute('autocomplete', 'off');
     input.setAttribute('spellcheck', 'false');
+    /*
+      MAKE RETURN INSERT A NEWLINE, not dismiss the keyboard.
+
+      iOS decides what its return key DOES from `enterkeyhint`, and with the
+      attribute absent it frequently resolves to "done" — the key is labelled
+      return, but pressing it blurs the field and closes the keyboard instead of
+      breaking the line. Reported exactly that way: "it doesn't actually make a
+      hard return, it just closes the keyboard".
+
+      `enter` is the value that means "insert a line break", which is what a
+      multi-line mask needs: Enter is how the user forces KIRA / KIRA onto two
+      lines rather than letting it wrap.
+
+      Nothing in this app calls `preventDefault` on Enter (verified), so once
+      iOS stops treating the key as a dismissal the textarea's own default
+      behaviour inserts the newline.
+    */
+    input.setAttribute('enterkeyhint', 'enter');
+
+    /*
+      REFUSE THE LINE BREAK THAT WOULD NOT RENDER.
+
+      `wrapText` caps the render at MAX_LINES, so a fourth line is silently
+      dropped — the character appears in the field, the canvas ignores it, and
+      nothing says why. Blocking the keystroke makes the ceiling something the
+      user can feel instead of something that fails quietly behind them.
+
+      Only a NEW break is refused: Enter still works normally while there is
+      room, and every other key is untouched.
+    */
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const lines = input.value.split('\n').length;
+      if (lines >= MAX_LINES) e.preventDefault();
+    });
     /*
       NOT autofocused, deliberately. Focusing on load pops the phone keyboard
       over the stage before the user has seen the app — the first thing they
