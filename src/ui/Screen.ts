@@ -169,20 +169,32 @@ export class Screen {
     input.setAttribute('enterkeyhint', 'enter');
 
     /*
-      REFUSE THE LINE BREAK THAT WOULD NOT RENDER.
+      INSERT THE NEWLINE OURSELVES.
 
-      `wrapText` caps the render at MAX_LINES, so a fourth line is silently
-      dropped — the character appears in the field, the canvas ignores it, and
-      nothing says why. Blocking the keystroke makes the ceiling something the
-      user can feel instead of something that fails quietly behind them.
+      iOS treats Return in a textarea as "done" and blurs the field, closing the
+      keyboard instead of breaking the line. `enterkeyhint` does NOT change
+      this — it only relabels the key. The only reliable fix is to take the
+      keystroke: preventDefault stops the dismissal, and the newline is spliced
+      into the value directly.
 
-      Only a NEW break is refused: Enter still works normally while there is
-      room, and every other key is untouched.
+      The keyboard stays up because the field never loses focus. iOS already
+      has its own dismiss control, so Return does not need to be one.
+
+      Refused at MAX_LINES, since `wrapText` caps the render there — a fourth
+      line would appear in the field and be silently dropped by the canvas.
     */
     input.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
-      const lines = input.value.split('\n').length;
-      if (lines >= MAX_LINES) e.preventDefault();
+      e.preventDefault();                       // stop iOS closing the keyboard
+      if (input.value.split('\n').length >= MAX_LINES) return;
+      if (input.value.length >= MAX_CHARS) return;
+      const a = input.selectionStart ?? input.value.length;
+      const b = input.selectionEnd ?? a;
+      input.value = input.value.slice(0, a) + '\n' + input.value.slice(b);
+      const caret = a + 1;
+      try { input.setSelectionRange(caret, caret); } catch { /* not focusable yet */ }
+      // Dispatch so the normal input path runs — one route to the session.
+      input.dispatchEvent(new Event('input', { bubbles: true }));
     });
     /*
       NOT autofocused, deliberately. Focusing on load pops the phone keyboard
