@@ -110,12 +110,18 @@ const screen = new Screen({
   // Turning the dial face scrubs the playhead. This had NO handler at all —
   // the dial computed a position and emitted it into nothing.
   onScrub: (t) => session.scrubTo(t),
-  // Swipe the letter to step through A–Z. Character is an invalidating param,
-  // so swiping while frozen discards the capture and returns to live.
-  onLetterSwipe: (dir) => {
-    session.stepLetter(dir);
+  /*
+    The mask text changed — the user typed.
+
+    Replaces the A-Z swipe. Text is an INVALIDATING param, so editing while a
+    capture is frozen discards it and returns to live; `setParam` owns that and
+    `Screen` blocks the input in the captured phase so it cannot happen by
+    accident.
+  */
+  onTextChange: (text) => {
+    session.setText(text);
     // The bar's readout is `aria-live`, so this both shows and announces it.
-    screen.bar.setLetter(session.letter);
+    screen.bar.setLetter(session.text);
   },
   /*
     Invert — utility bar, node 102:622.
@@ -636,7 +642,8 @@ window.addEventListener('pagehide', () => session.dispose());
  * because a second `getUserMedia` call must come from a user gesture.
  */
 // Seed the UI from the session so neither starts out of step.
-screen.bar.setLetter(session.letter);
+screen.bar.setLetter(session.text);
+screen.setText(session.text);
 /*
   The aim chime starts MUTED.
 

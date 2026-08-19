@@ -7,8 +7,9 @@ A camera that turns what it sees into dots — and plays them as sound.
 **1. Open it.** Allow the camera. Tap the screen once (this turns sound on).
 Tap the speaker icon to unmute.
 
-**2. Turn on the mask** (4th icon). Now the picture only appears inside a letter.
-Swipe left or right to change the letter.
+**2. Turn on the mask** (4th icon). Now the picture only appears inside your text.
+Tap the picture to bring up the keyboard and type — up to 20 characters, which
+wrap onto up to 3 lines. Fewer letters means bigger dots.
 
 **3. Point it at something.** Dots appear, and each new dot makes a sound.
 
@@ -29,6 +30,7 @@ and contrast)
 ## Good to know
 
 - The mask starts off. Turn it on — that's the whole idea of the app.
+- Type anything: upper and lowercase, spaces, and Enter for a line break.
 - While a picture is frozen, some controls are greyed out. Go back to the camera
   to use them.
 - **Sound settings:** four dot shapes each play a different instrument. Turn the

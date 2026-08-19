@@ -22,7 +22,7 @@
  *     engine; which synthesis a profile id resolves to is `engine.ts`'s call.
  */
 
-import { getGlyphMask, clearMaskCache } from './mask/rasterizeGlyph';
+import { getTextMask, clearMaskCache, MAX_CHARS } from './mask/rasterizeGlyph';
 import { ditherFrame, resetExposure, UNLIT } from './camera/dither';
 import { precomputeNoise, type DitherMode } from './camera/noise';
 import {
@@ -139,7 +139,11 @@ export interface SessionEvents {
 export const gridHeightFor = (w: number) => Math.round(w * 1.10);
 
 const DEFAULTS: SessionParams = {
-  char: 'A',
+  /*
+    The mask text. Up to MAX_CHARS characters, wrapped across up to 3 lines.
+    Newlines are explicit breaks; everything else wraps on its own.
+  */
+  char: 'KIRA\nKIRA\nKIRA',
   /*
     A BUNDLED condensed face — see the `@font-face` note in `tokens.css`.
 
@@ -180,12 +184,6 @@ const DEFAULTS: SessionParams = {
  * (`HANDOFF.md` §8), so the multipliers are 3 / 1.5 / 1 second.
  */
 const BASE_SWEEP_SECONDS = 3;
-
-/**
- * The letter set. A–Z only, one built-in typeface, no font picker — the
- * user's decision, recorded in `VERSIONS.md`.
- */
-const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 /** Where the per-shape voice assignments persist between sessions. */
 const ASSIGNMENTS_KEY = 'impression.voiceAssignments.v1';
@@ -287,8 +285,8 @@ export class Session {
   }
 
   private mask() {
-    return getGlyphMask({
-      char: this.params.char,
+    return getTextMask({
+      text: this.params.char,
       fontFamily: this.params.fontFamily,
       fontWeight: this.params.fontWeight,
       gridWidth: this.params.gridWidth,
@@ -925,20 +923,26 @@ export class Session {
    * flight so the playhead keeps its position while the rate changes.
    */
   /**
-   * Step through A–Z. `dir` is +1 for the next letter, −1 for the previous.
+   * Set the mask text.
    *
-   * Wraps at both ends, so the alphabet is a ring rather than a list with
-   * dead ends. Character is an INVALIDATING param: switching while a capture
-   * exists discards it and returns to live, which `setParam` already handles.
+   * Replaces `stepLetter`, which walked a hardcoded A-Z ring — there is no
+   * alphabet to step through now that the mask is typed.
+   *
+   * Clamped to MAX_CHARS here rather than trusting the input element's
+   * `maxlength`: paste, autocorrect and speech-to-text can all exceed it, and
+   * the rasterizer's line budget is what actually has to hold.
+   *
+   * INVALIDATING, exactly as `char` was: it changes which cells are lit, so a
+   * frozen capture cannot survive it. `setParam` already owns that behaviour —
+   * routing through it keeps one code path for the whole invalidating class
+   * rather than a second copy that can drift.
    */
-  stepLetter(dir: 1 | -1): void {
-    const i = ALPHABET.indexOf(this.params.char.toUpperCase());
-    // An unrecognised character (a loaded font's glyph, say) starts from 'A'
-    // rather than throwing the index to -1 and landing on 'Z'.
-    const from = i < 0 ? 0 : i;
-    const next = (from + dir + ALPHABET.length) % ALPHABET.length;
-    this.setParam('char', ALPHABET[next]);
+  setText(text: string): void {
+    this.setParam('char', text.slice(0, MAX_CHARS));
   }
+
+  /** The current mask text, for a UI that wants to show it. */
+  get text(): string { return this.params.char; }
 
   /** The current letter, for a UI that wants to show it. */
   get letter(): string { return this.params.char; }

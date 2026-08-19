@@ -29,6 +29,7 @@
 import { MiniDial } from './MiniDial';
 import { LargeDial } from './LargeDial';
 import { UtilityBar } from './UtilityBar';
+import { MAX_CHARS } from '../mask/rasterizeGlyph';
 import { icon } from './icons';
 import { renderField, type Field } from './field';
 
@@ -54,14 +55,8 @@ export interface ScreenOptions {
   onSpeedChange?: (x: 1 | 2 | 3) => void;
   /** The dial face was turned. `t` is 0..1 across the sweep. */
   onScrub?: (t: number) => void;
-  /**
-   * The letter was swiped. `+1` = next (swipe left), `-1` = previous
-   * (swipe right) — the content follows the finger.
-   *
-   * Also fired by ArrowLeft/ArrowRight on the focused stage, which is the
-   * keyboard path now that the ‹ A › buttons are gone.
-   */
-  onLetterSwipe?: (dir: 1 | -1) => void;
+  /** The mask text changed. Fires on every keystroke, already length-clamped. */
+  onTextChange?: (text: string) => void;
   /** Invert tapped in the utility bar. */
   onInvertToggle?: () => void;
   /** Flip camera tapped. Only reachable while aiming and with two cameras. */
@@ -72,11 +67,6 @@ export interface ScreenOptions {
   onMaskToggle?: () => void;
 }
 
-/**
- * How far a horizontal drag must travel to count as a swipe. Below this it is
- * a tap or a jitter; the letter must not flip because a finger rested on it.
- */
-const SWIPE_MIN_PX = 40;
 
 export class Screen {
   readonly el: HTMLDivElement;
@@ -84,6 +74,7 @@ export class Screen {
   readonly large: LargeDial;
   readonly bar: UtilityBar;
   readonly dials: Record<string, MiniDial> = {};
+  private textInput!: HTMLTextAreaElement;
 
   private captureBtn: HTMLButtonElement;
   private flipBtn!: HTMLButtonElement;
@@ -118,81 +109,88 @@ export class Screen {
       `group` rather than `application`: it holds a canvas and a gesture
       surface, not a widget with its own interaction model.
     */
-    stage.tabIndex = 0;
-    stage.setAttribute('role', 'group');
-    stage.setAttribute('aria-label', 'Letter — press left or right arrow to change');
-    stage.addEventListener('keydown', (e) => {
-      let dir: 1 | -1 | 0 = 0;
-      if (e.key === 'ArrowLeft') dir = -1;
-      else if (e.key === 'ArrowRight') dir = 1;
-      if (!dir) return;
-      e.preventDefault();
-      // Same guard as the swipe: invalidating while frozen.
-      if (this.phase === 'captured') return;
-      this.o.onLetterSwipe?.(dir);
-    });
+    /*
+      TAP THE STAGE TO TYPE.
+
+      The mask is typed text now, so the stage's job is to summon a keyboard and
+      hand keystrokes to a hidden field. The field is invisible rather than a
+      visible box because the stage IS the subject — a text input sitting over
+      the viewfinder would compete with the thing it edits.
+
+      A11y: the textarea is a real focusable form control with a label, so
+      keyboard, switch-access and screen-reader users reach the text directly.
+      That is a straight improvement on the swipe it replaces, which those users
+      could not perform at all — the arrow-key fallback that used to live here
+      existed precisely because a gesture is not accessible, and a focusable
+      input makes it unnecessary.
+    */
     const canvas = document.createElement('canvas');
     canvas.className = 'screen__canvas';
     // The backing store is NOT set here. It is driven by `syncCanvas()` from a
-    // ResizeObserver, because the stage height is now elastic (see the clamp in
+    // ResizeObserver, because the stage height is elastic (see the clamp in
     // `index.html`) and a constant cannot track a box that changes at runtime.
-    // At 810 tall this still resolves to the design's 390x496 at 2x.
     stage.appendChild(canvas);
 
+    const input = document.createElement('textarea');
+    input.className = 'screen__text-input';
+    input.setAttribute('aria-label', 'Mask text');
+    input.maxLength = MAX_CHARS;
+    input.rows = 3;
     /*
-      Swipe the LETTER to change it — left for the next, right for the
-      previous, the way you'd flick through cards.
-
-      Tracked on the stage rather than the canvas so the whole letter area is
-      the target, and with pointer events rather than touch so a desktop drag
-      works identically. `touch-action: pan-y` in CSS lets a vertical scroll
-      still pass through to the page while claiming the horizontal axis.
-
-      A swipe must clear BOTH a distance threshold and beat the vertical
-      delta, or a slightly-diagonal scroll would flip the letter. Direction is
-      taken from the net displacement at release, so a wander that returns to
-      where it started does nothing.
+      iOS would otherwise capitalise the first letter, autocorrect the word into
+      something else, and offer spelling suggestions over the viewfinder. The
+      text is a design decision, not prose — every one of those transformations
+      is wrong here. `autocapitalize=off` matters especially now that lowercase
+      is typeable and meaningful.
     */
-    let swipe: { x: number; y: number; id: number } | null = null;
-    stage.addEventListener('pointerdown', (e) => {
-      // Ignore a second finger while one swipe is armed. A single shared slot
-      // used to be overwritten by any later pointerdown, so a second touch
-      // orphaned the first finger's gesture and BOTH releases were dropped.
-      if (swipe) return;
-      swipe = { x: e.clientX, y: e.clientY, id: e.pointerId };
-      // Capture, so a swipe that leaves the stage still reports its release
-      // here. Without it the pointerup fired on whatever element the finger
-      // ended over, the gesture was lost, and `swipe` stayed armed — the next
-      // tap was then measured against a stale origin. Guarded because a
-      // synthetic pointer has no capture to take (see LargeDial).
-      try { stage.setPointerCapture(e.pointerId); } catch { /* no active pointer */ }
+    input.setAttribute('autocapitalize', 'off');
+    input.setAttribute('autocorrect', 'off');
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('spellcheck', 'false');
+    /*
+      NOT autofocused, deliberately. Focusing on load pops the phone keyboard
+      over the stage before the user has seen the app — the first thing they
+      would meet is a keyboard covering a viewfinder they never asked to edit.
+      The keyboard appears only on a deliberate tap.
+    */
+    this.textInput = input;
+    stage.appendChild(input);
+
+    input.addEventListener('input', () => {
+      // Clamp here too: paste, dictation and autocorrect can all exceed
+      // `maxLength`, which the UA enforces only for typed keys.
+      if (input.value.length > MAX_CHARS) input.value = input.value.slice(0, MAX_CHARS);
+      this.o.onTextChange?.(input.value);
     });
-    const endSwipe = (e: PointerEvent, commit: boolean) => {
-      if (!swipe || e.pointerId !== swipe.id) return;
-      const dx = e.clientX - swipe.x;
-      const dy = e.clientY - swipe.y;
-      swipe = null;
-      try { stage.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
+
+    /*
+      TAP, NOT DRAG.
+
+      The stage is still a drag surface, and a drag ending on it must not summon
+      a keyboard. Distinguish by movement: a tap barely moves. Without this,
+      any gesture over the letter would throw the keyboard up mid-interaction.
+    */
+    let down: { x: number; y: number; id: number } | null = null;
+    const TAP_SLOP_PX = 10;
+    stage.addEventListener('pointerdown', (e) => {
+      if (down) return;
+      down = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    });
+    const endTap = (e: PointerEvent, commit: boolean) => {
+      if (!down || e.pointerId !== down.id) return;
+      const dx = Math.abs(e.clientX - down.x);
+      const dy = Math.abs(e.clientY - down.y);
+      down = null;
       if (!commit) return;
-      if (Math.abs(dx) < SWIPE_MIN_PX) return;
-      if (Math.abs(dx) <= Math.abs(dy)) return;   // more vertical than horizontal
-      // Letter is INVALIDATING: swiping while frozen would discard the capture
-      // with no warning. Every other invalidating control is disabled in this
-      // phase (res, auto level, invert) — a gesture cannot be greyed out, so it
-      // is ignored instead.
+      if (dx > TAP_SLOP_PX || dy > TAP_SLOP_PX) return;   // a drag, not a tap
+      // Text is INVALIDATING: editing while frozen would discard the capture
+      // silently. Every other invalidating control is disabled in this phase,
+      // and a tap cannot be greyed out — so it is ignored instead.
       if (this.phase === 'captured') return;
-      this.o.onLetterSwipe?.(dx < 0 ? 1 : -1);
+      input.focus();
     };
-    // Listen on the DOCUMENT, not the stage. Pointer capture normally
-    // redirects the release back here, but it is unavailable for synthetic
-    // pointers and can be revoked by the UA — and a swipe that ends off the
-    // stage would then be silently dropped, leaving `swipe` armed so the next
-    // tap was measured against a stale origin. The id check makes a
-    // document-level listener safe.
-    document.addEventListener('pointerup', (e) => endSwipe(e, true));
-    // Both must check the id: an unrelated pointer being cancelled (a palm, an
-    // OS gesture) previously cleared a valid in-flight swipe.
-    document.addEventListener('pointercancel', (e) => endSwipe(e, false));
+    document.addEventListener('pointerup', (e) => endTap(e, true));
+    document.addEventListener('pointercancel', (e) => endTap(e, false));
 
     // ── utility bar ──────────────────────────────────────
     this.bar = new UtilityBar({
@@ -324,6 +322,15 @@ export class Screen {
     queueMicrotask(() => this.syncCanvas());
     setTimeout(() => this.syncCanvas(), 0);
   }
+
+  /**
+   * Seed the hidden input from the session.
+   *
+   * Called once at boot so the field already holds the default text. Without
+   * it the first keystroke would replace KIRA/KIRA/KIRA wholesale, because the
+   * input would have started empty while the mask displayed text.
+   */
+  setText(text: string) { if (this.textInput) this.textInput.value = text; }
 
   setPhase(p: Phase) {
     this.phase = p;

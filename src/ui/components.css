@@ -627,17 +627,25 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  /* Claim the horizontal axis for the letter swipe; leave the vertical one to
-     the page so the app can still be scrolled on a phone. */
+  /* Leave the vertical axis to the page so the app can still be scrolled on a
+     phone. The horizontal claim that used to be here was for the letter swipe,
+     which typed text replaced. */
   touch-action: pan-y;
-  user-select: none;
-  -webkit-user-select: none;
+  /*
+    NOT `user-select: none` any more. The stage now contains a real textarea,
+    and suppressing selection on the container blocks selecting, correcting and
+    caret-positioning inside it — the input is layered here precisely so it can
+    be edited. `.screen__canvas` carries the rule instead, so dragging over the
+    dots still cannot select anything.
+  */
 }
 /* Fill the stage. `field.ts` letterboxes the 4:5 grid inside whatever box it
    is given, so a full-bleed canvas means the letter is as large as the stage
    allows with no clipping. */
 .screen__canvas {
   display: block;
+  user-select: none;
+  -webkit-user-select: none;
   width: 100%;
   height: 100%;
 }
@@ -1164,3 +1172,47 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+  The mask text input.
+
+  INVISIBLE, NOT HIDDEN. `display:none` or `visibility:hidden` would make the
+  field unfocusable, so the keyboard could never be summoned and screen readers
+  would skip it. Instead it is a real, full-size, focusable control layered over
+  the stage with zero-alpha text.
+
+  `pointer-events: none` is essential: the stage's own tap handler decides when
+  to focus this, distinguishing a tap from a drag. Left interactive, the
+  textarea would swallow every pointer event over the letter — including the
+  drags the stage still needs — and would also summon the keyboard on any
+  incidental touch.
+
+  `caret-color: transparent` hides the blinking cursor. The dots ARE the
+  feedback; a caret floating over the letterform would read as a rendering
+  artifact rather than an input affordance.
+
+  `font-size: 16px` is load-bearing on iOS: Safari zooms the page when a focused
+  field's text is smaller than 16px, which would throw the carefully-sized stage
+  off-screen the moment the keyboard opened.
+*/
+.screen__text-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font-size: 16px;
+  resize: none;
+  pointer-events: none;
+  -webkit-user-select: text;
+  user-select: text;
+}
+/* No focus ring: the stage carries the visible state, and a ring around a
+   full-bleed transparent box would just outline the whole viewfinder. */
+.screen__text-input:focus { outline: none; }
