@@ -284,6 +284,23 @@ export class Session {
     return cells;
   }
 
+  /**
+   * An all-FALSE mask — no cell passes, so the stage renders empty.
+   *
+   * The counterpart to `openMask`, and cached for the same reason: it is
+   * consulted every frame while the text is empty, and allocating a 44x48
+   * boolean grid per frame would be pointless garbage.
+   */
+  private closedMaskCache: { cells: boolean[][]; w: number; h: number } | null = null;
+  private closedMask(w: number, h: number): boolean[][] {
+    const c = this.closedMaskCache;
+    if (c && c.w === w && c.h === h) return c.cells;
+    const cells: boolean[][] = [];
+    for (let r = 0; r < h; r++) cells.push(new Array(w).fill(false));
+    this.closedMaskCache = { cells, w, h };
+    return cells;
+  }
+
   private mask() {
     return getTextMask({
       text: this.params.char,
@@ -309,16 +326,25 @@ export class Session {
       rather than returning early so the renderer still clears whatever was
       there before (a letter left over from toggling the mask off, say).
     */
+    const gw2 = this.params.gridWidth;
+    const gh2 = this.gridHeight;
     if (!this.params.masked) {
-      const gw = this.params.gridWidth;
-      const gh = this.gridHeight;
+      const gw = gw2;
+      const gh = gh2;
       this.ev.onFrame?.(
         { cells: new Int8Array(gw * gh).fill(UNLIT), gridWidth: gw, gridHeight: gh }, -1);
       return;
     }
     const m = this.mask();
+    /*
+      Empty text pre-camera: emit an EMPTY field rather than returning.
+
+      Returning left whatever was on the canvas — the previous letter — so
+      deleting the text appeared to do nothing at all. Emitting clears it.
+    */
     if (!m) {
-      this.ev.onStatus?.(`no glyph for "${this.params.char}"`, true);
+      this.ev.onFrame?.(
+        { cells: new Int8Array(gw2 * gh2).fill(UNLIT), gridWidth: gw2, gridHeight: gh2 }, -1);
       return;
     }
     const cells = new Int8Array(m.width * m.height).fill(UNLIT);
@@ -498,9 +524,31 @@ export class Session {
     let inkCount: number;
     if (this.params.masked) {
       const m = this.mask();
-      if (!m) { this.rafId = requestAnimationFrame(this.loop); return; }
-      maskCells = m.cells;
-      inkCount = m.inkCount;
+      /*
+        NO MASK = NOTHING LIT, not a skipped frame.
+
+        This used to schedule the next frame and return, painting nothing. That
+        was defensible when the mask was one character and a null meant a glyph
+        that failed to rasterize — a transient, unreachable-by-the-user state.
+
+        Typed text makes empty REACHABLE: delete the last character and the
+        rasterizer returns null every frame from then on. The old early return
+        then skipped the dither, skipped `onFrame`, and left the canvas holding
+        its last image — the app looked completely frozen, and typing a letter
+        was the only way out, which nobody would guess.
+
+        An all-false mask is the honest answer: no cells pass the stencil, so
+        the stage goes black and the frame loop keeps running. Deleting to
+        empty now reads as "the letterform is gone", which is what happened,
+        and typing brings it straight back.
+      */
+      if (!m) {
+        maskCells = this.closedMask(gw, gh);
+        inkCount = 0;
+      } else {
+        maskCells = m.cells;
+        inkCount = m.inkCount;
+      }
     } else {
       maskCells = this.openMask(gw, gh);
       inkCount = gw * gh;
@@ -938,7 +986,27 @@ export class Session {
    * rather than a second copy that can drift.
    */
   setText(text: string): void {
-    this.setParam('char', text.slice(0, MAX_CHARS));
+    const clamped = text.slice(0, MAX_CHARS);
+    /*
+      THE LAST CHARACTER CANNOT BE DELETED.
+
+      An empty canvas is not a state worth reaching: with the stencil on and no
+      text there is nothing to look at, nothing to photograph and nothing to
+      play — the stage is simply black, and the only way out is to guess that
+      typing fixes it.
+
+      Rejected HERE rather than in the input handler because this is the single
+      point every path goes through — keystroke, paste, dictation, autocorrect,
+      and any programmatic caller. Guarding the keystroke alone would let a
+      select-all-and-delete through, which is exactly how a user empties a
+      field in practice.
+
+      `trim()` in the test, not `length`: a string of spaces rasterizes to
+      nothing, so it is empty for every purpose that matters here even though
+      it has characters in it.
+    */
+    if (clamped.trim().length === 0) return;
+    this.setParam('char', clamped);
   }
 
   /** The current mask text, for a UI that wants to show it. */
