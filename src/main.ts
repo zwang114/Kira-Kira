@@ -453,7 +453,20 @@ window.addEventListener('keydown', (e) => {
     if (session.phase === 'aiming') { if (session.shutter()) runShutterFlash(); }
     else session.resumeAiming();
   } else if (e.code === 'Enter') {
-    if (typing) (t as HTMLInputElement).blur();
+    /*
+      ENTER BELONGS TO THE TEXT FIELD WHILE IT HAS FOCUS.
+
+      This used to `blur()` on Enter — dismissing the keyboard, which made sense
+      when Enter meant "commit this value and get out of the way". The mask is
+      multi-line text now, so Enter is how a line break is typed, and
+      `Screen`'s own handler inserts it. Blurring here fired immediately after
+      and closed the keyboard anyway: the newline appeared AND the keypad
+      dismissed, which is exactly the reported symptom.
+
+      Returning early also protects the transport below — replaying a frozen
+      capture every time the user breaks a line would be a surprise.
+    */
+    if (typing) return;
     if (session.phase === 'frozen') { e.preventDefault(); void session.play(); }
   } else if (e.code === 'KeyI') {
     if (typing) return; // 'i' is a legitimate character to type

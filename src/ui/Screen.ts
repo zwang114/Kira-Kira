@@ -172,32 +172,39 @@ export class Screen {
     input.setAttribute('enterkeyhint', 'enter');
 
     /*
-      INSERT THE NEWLINE OURSELVES.
+      ENTER INSERTS A NEWLINE, WITHOUT DISMISSING THE KEYBOARD.
 
-      iOS treats Return in a textarea as "done" and blurs the field, closing the
-      keyboard instead of breaking the line. `enterkeyhint` does NOT change
-      this — it only relabels the key. The only reliable fix is to take the
-      keystroke: preventDefault stops the dismissal, and the newline is spliced
-      into the value directly.
+      iOS treats Return in a textarea as "done" and blurs the field. `enterkeyhint`
+      does not change that — it only relabels the key — so the keystroke has to
+      be taken with `preventDefault`.
 
-      The keyboard stays up because the field never loses focus. iOS already
-      has its own dismiss control, so Return does not need to be one.
+      The newline is then inserted with `execCommand('insertText')`, NOT by
+      assigning `input.value`. Assigning the value replaces the whole string and
+      throws away the browser's own edit state, which is what backspace and undo
+      operate on: after a hand-assigned newline, Delete could no longer join the
+      lines back up. `insertText` goes through the same path a real keypress
+      does, so the edit history stays intact and Delete behaves normally.
 
-      Refused at MAX_LINES, since `wrapText` caps the render there — a fourth
-      line would appear in the field and be silently dropped by the canvas.
+      Deprecated but not replaced — the Input Events spec has no scripted
+      alternative, and every engine still implements it for exactly this case.
+      The manual splice is kept as a fallback for the day one stops.
     */
     input.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       e.preventDefault();                       // stop iOS closing the keyboard
       if (input.value.split('\n').length >= MAX_LINES) return;
       if (input.value.length >= MAX_CHARS) return;
-      const a = input.selectionStart ?? input.value.length;
-      const b = input.selectionEnd ?? a;
-      input.value = input.value.slice(0, a) + '\n' + input.value.slice(b);
-      const caret = a + 1;
-      try { input.setSelectionRange(caret, caret); } catch { /* not focusable yet */ }
-      // Dispatch so the normal input path runs — one route to the session.
-      input.dispatchEvent(new Event('input', { bubbles: true }));
+      let inserted = false;
+      try { inserted = document.execCommand('insertText', false, '\n'); } catch { /* fall through */ }
+      if (!inserted) {
+        // Fallback: splice by hand. Loses native undo, but a newline that
+        // cannot be typed at all is worse.
+        const a = input.selectionStart ?? input.value.length;
+        const b = input.selectionEnd ?? a;
+        input.value = input.value.slice(0, a) + '\n' + input.value.slice(b);
+        try { input.setSelectionRange(a + 1, a + 1); } catch { /* not focusable */ }
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
     });
     /*
       NOT autofocused, deliberately. Focusing on load pops the phone keyboard
@@ -527,6 +534,20 @@ export class Screen {
    */
   private caret(): Caret | null {
     if (!this.caretOn || !this.textInput) return null;
+    /*
+      NO CARET WHILE THE FIELD IS EMPTY.
+
+      Deleting the last character empties the field, but the canvas keeps
+      showing the previous text (see `session.lastRenderedText` — a blank stage
+      would otherwise stall the frame loop). The caret would then be drawn at
+      index 0 of an empty string, which lands to the LEFT of a letter that is
+      no longer in the field: measured jumping from x=35.1 to x=5.8 on a single
+      'K'. It points at a character the user has already deleted.
+
+      There is no honest position to draw, so nothing is drawn. The caret
+      returns the moment a character does.
+    */
+    if (this.textInput.value.length === 0) return null;
     const layout = getTextLayout();
     if (!layout.lines.length) return null;
 
