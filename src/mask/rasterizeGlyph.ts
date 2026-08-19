@@ -498,8 +498,28 @@ export function rasterizeText(opts: RasterizeTextOptions): GlyphMask | null {
     fillX = 0.99,
   } = opts;
 
-  const lines = wrapText(text);
-  if (lines.length === 0 || lines.every((l) => l.length === 0)) return null;
+  const allLines = wrapText(text);
+  if (allLines.length === 0 || allLines.every((l) => l.length === 0)) return null;
+
+  /*
+    SIZE ON THE LINES THAT HAVE INK, not on trailing empty ones.
+
+    Pressing Return leaves a trailing empty line — "K\n" wraps to ["K", ""] —
+    and that line consumed a full line's height in the block even though it
+    renders nothing. The visible text shrank to make room for blank space:
+    measured, a single K collapsed from 729 ink to 156, and KIRA/KIRA from 977
+    to 476, the instant Return was pressed.
+
+    Trailing empties are dropped for LAYOUT only. Interior empties are kept —
+    a deliberate blank line between two lines of text is real composition, and
+    it has to hold its space.
+  */
+  let lastInk = -1;
+  for (let i = allLines.length - 1; i >= 0; i--) {
+    if (allLines[i].length > 0) { lastInk = i; break; }
+  }
+  const lines = allLines.slice(0, lastInk + 1);
+  if (lines.length === 0) return null;
 
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -553,7 +573,24 @@ export function rasterizeText(opts: RasterizeTextOptions): GlyphMask | null {
   const lineSpanRatio = (capHeightRatio + descentRatio) * 1.18;
 
   // Start from a height-derived scale, then let width pull it down.
-  const blockSpanRatio = capHeightRatio + descentRatio + lineSpanRatio * (lines.length - 1);
+  /*
+    Reserve room for a trailing empty line, if there is one.
+
+    The trailing line is excluded from `lines` so it cannot shrink the text
+    arbitrarily, but the CARET still has to land somewhere visible below the
+    last line of text. With a single huge letter there is no room at all — 'K'
+    alone spans rows 1.4 to 46.6 of 48 — so the caret was clamped to sit beside
+    the letter rather than under it, and pressing Return looked like nothing had
+    happened.
+
+    Counting one trailing line here scales the text down just enough to open
+    that space. It is capped at one because that is all the user can produce
+    before typing a character, at which point the line stops being empty and is
+    measured normally.
+  */
+  const trailingBlank = allLines.length > lines.length ? 1 : 0;
+  const blockSpanRatio =
+    capHeightRatio + descentRatio + lineSpanRatio * (lines.length - 1 + trailingBlank);
   let fontPx = targetH / blockSpanRatio;
 
   /*
@@ -631,6 +668,27 @@ export function rasterizeText(opts: RasterizeTextOptions): GlyphMask | null {
       top: (originY - capPx - padPx) / SS,
       bottom: (originY + descentPx - padPx) / SS,
     });
+  }
+
+  /*
+    Give TRAILING EMPTY LINES a caret slot.
+
+    They are excluded from `lines` so they cannot shrink the text (an empty
+    line reserving a line's height made a single K collapse from 729 ink to
+    156). But the caret still has to be able to sit on one, or pressing Return
+    on the last line does nothing visible until the next character is typed —
+    the break has happened and the user cannot see it.
+
+    Positioned one line-pitch below the last real line, with a single advance
+    at the block's horizontal centre, since there are no glyphs to measure.
+    Nothing is drawn here; it exists only so the caret has somewhere to go.
+  */
+  for (let i = lines.length; i < allLines.length; i++) {
+    const originY = blockTop + capPx + linePitchPx * i;
+    const centre = gridWidth / 2;
+    const top = (originY - capPx - padPx) / SS;
+    const bottom = (originY + descentPx - padPx) / SS;
+    lastTextLayout.lines.push({ text: '', advances: [centre], top, bottom });
   }
 
   const img = ctx.getImageData(0, 0, rw, rh).data;
