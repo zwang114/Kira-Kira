@@ -118,9 +118,19 @@ const ACCENT_RGB: [number, number, number] = [0xff, 0x62, 0x00];
  * `density / 0.62` (see `drawShape`), so 0.62 is the identity and the shape
  * ramp's measured coverages hold.
  */
+/**
+ * Where to draw the text caret, in GRID space.
+ *
+ * Pixels are deliberately NOT accepted: the caller would have to know this
+ * function's letterboxing to compute them, and any disagreement would put the
+ * caret in the wrong place silently — the same reasoning that makes the
+ * playhead a column index rather than an x.
+ */
+export interface Caret { x: number; top: number; bottom: number; }
+
 export function renderField(
   canvas: HTMLCanvasElement, f: Field, playhead = -1, density = 0.62,
-  trail = false,
+  trail = false, caret: Caret | null = null,
 ) {
   const ctx = canvas.getContext('2d')!;
   const dpr = canvas.width / (canvas.clientWidth || canvas.width);
@@ -186,5 +196,32 @@ export function renderField(
     ctx.fillStyle = '#ff6200';
     // Full canvas height: the grid now fills the canvas, so the rule spans it.
     ctx.fillRect(ox + playhead * cell, oy, Math.max(2 * dpr, cell * 0.1), cell * f.gridHeight);
+  }
+
+  /*
+    The text caret.
+
+    Drawn HERE rather than shown as the textarea's native cursor, because that
+    cursor sits where the hidden field's own 16px text would be — the top-left
+    corner — and not where the letterform is rendered. The only way to put a
+    caret between two dots is to draw it in the same geometry as the dots.
+
+    Blink is computed from the clock rather than a CSS animation: this is a
+    canvas, so there is no element to animate, and the frame loop is already
+    repainting. 530ms is the platform-conventional half-period.
+
+    Spans just its own LINE, not the whole canvas, so it reads as a text cursor
+    rather than a second playhead — and is drawn in `--dot` rather than the
+    accent, which belongs to the playhead alone.
+  */
+  if (caret && Math.floor(Date.now() / 530) % 2 === 0) {
+    ctx.fillStyle = '#f2f0ed';
+    const w = Math.max(2 * dpr, cell * 0.08);
+    ctx.fillRect(
+      ox + caret.x * cell - w / 2,
+      oy + caret.top * cell,
+      w,
+      (caret.bottom - caret.top) * cell,
+    );
   }
 }

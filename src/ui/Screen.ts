@@ -29,9 +29,9 @@
 import { MiniDial } from './MiniDial';
 import { LargeDial } from './LargeDial';
 import { UtilityBar } from './UtilityBar';
-import { MAX_CHARS, MAX_LINES } from '../mask/rasterizeGlyph';
+import { MAX_CHARS, MAX_LINES, getTextLayout } from '../mask/rasterizeGlyph';
 import { icon } from './icons';
-import { renderField, type Field } from './field';
+import { renderField, type Caret, type Field } from './field';
 
 export type Phase = 'rest' | 'captured';
 
@@ -77,6 +77,9 @@ export class Screen {
   private textInput!: HTMLTextAreaElement;
   /** Mirrors the session's `masked` param — the keypad is pointless without it. */
   private maskOn = false;
+  /** True while the text field has focus — the caret's whole lifetime. */
+  private caretOn = false;
+  private caretTimer: number | null = null;
 
   private captureBtn: HTMLButtonElement;
   private flipBtn!: HTMLButtonElement;
@@ -204,6 +207,36 @@ export class Screen {
     */
     this.textInput = input;
     stage.appendChild(input);
+
+    /*
+      The caret exists only while the field is focused.
+
+      A blinking bar on a viewfinder nobody is editing would read as a UI
+      artifact, so focus is what turns it on and blur is what removes it —
+      exactly the lifetime the user asked for.
+
+      A repaint ticker runs alongside, because the caret blinks on wall-clock
+      time and the frame loop does not run while the camera is off or the
+      capture is frozen. Without it the bar would freeze mid-blink in those
+      states. It is cancelled on blur so nothing repaints for an invisible
+      caret.
+    */
+    input.addEventListener('focus', () => {
+      this.caretOn = true;
+      if (this.caretTimer === null) {
+        this.caretTimer = window.setInterval(() => this.repaint(), 120);
+      }
+      this.repaint();
+    });
+    input.addEventListener('blur', () => {
+      this.caretOn = false;
+      if (this.caretTimer !== null) { clearInterval(this.caretTimer); this.caretTimer = null; }
+      this.repaint();
+    });
+    // Moving the caret with arrows, or tapping to reposition, must redraw it.
+    for (const ev of ['keyup', 'click', 'select'] as const) {
+      input.addEventListener(ev, () => { if (this.caretOn) this.repaint(); });
+    }
 
     input.addEventListener('input', () => {
       // Clamp here too: paste, dictation and autocorrect can all exceed
@@ -408,6 +441,57 @@ export class Screen {
   setText(text: string) { if (this.textInput) this.textInput.value = text; }
 
   /**
+   * Repaint the last frame without changing it.
+   *
+   * The caret blinks on wall-clock time, and `syncCanvas` cannot serve this —
+   * it early-returns when the backing store is already the right size, which is
+   * the normal case. Redrawing `lastDraw` is the cheapest way to advance the
+   * blink without touching the pipeline.
+   */
+  private repaint() {
+    const d = this.lastDraw;
+    if (d) renderField(this.canvas, d.field, d.playhead, d.density, d.trail, this.caret());
+  }
+
+  /**
+   * Where the caret sits, in grid space — or null when it should not be drawn.
+   *
+   * Maps the textarea's selection index onto the RENDERED layout, which is the
+   * only thing that knows where the glyphs actually landed. The field's own
+   * string and the rendered lines are not the same: wrapping can insert breaks
+   * that the raw value does not contain, so the index has to be walked line by
+   * line rather than assumed to match.
+   */
+  private caret(): Caret | null {
+    if (!this.caretOn || !this.textInput) return null;
+    const layout = getTextLayout();
+    if (!layout.lines.length) return null;
+
+    const value = this.textInput.value;
+    const pos = this.textInput.selectionStart ?? value.length;
+
+    /*
+      Walk the RENDERED lines, consuming characters as they appear in the
+      field's value. Wrapping drops the spaces it breaks on, so a rendered line
+      can be shorter than the span of the value it came from — advancing by the
+      line's own length plus one separator keeps the two in step.
+    */
+    let remaining = pos;
+    for (let i = 0; i < layout.lines.length; i++) {
+      const line = layout.lines[i];
+      const isLast = i === layout.lines.length - 1;
+      if (remaining <= line.text.length || isLast) {
+        const idx = Math.max(0, Math.min(line.text.length, remaining));
+        const x = line.advances[idx] ?? line.advances[line.advances.length - 1];
+        return { x, top: line.top, bottom: line.bottom };
+      }
+      remaining -= line.text.length + 1;   // + the separator that was consumed
+    }
+    const last = layout.lines[layout.lines.length - 1];
+    return { x: last.advances[last.advances.length - 1], top: last.top, bottom: last.bottom };
+  }
+
+  /**
    * Mirror the session's mask state.
    *
    * Drives the utility-bar icon AND the tap-to-type gate, from one call, so the
@@ -493,7 +577,7 @@ export class Screen {
     // to paint the next frame — without this the stage goes black on every
     // resize and stays black until the user captures again.
     this.lastDraw = { field, playhead, density, trail };
-    renderField(this.canvas, field, playhead, density, trail);
+    renderField(this.canvas, field, playhead, density, trail, this.caret());
   }
 
   /**
@@ -525,6 +609,6 @@ export class Screen {
     this.canvas.width = w;
     this.canvas.height = h;
     const d = this.lastDraw;
-    if (d) renderField(this.canvas, d.field, d.playhead, d.density, d.trail);
+    if (d) renderField(this.canvas, d.field, d.playhead, d.density, d.trail, this.caret());
   }
 }

@@ -444,6 +444,30 @@ export interface RasterizeTextOptions extends Omit<RasterizeOptions, 'char'> {
   text: string;
 }
 
+/** Where each rendered line sits, in GRID cells. Populated by `rasterizeText`. */
+export interface TextLayout {
+  lines: Array<{
+    text: string;
+    /** x for each caret slot, 0..line.length, in grid columns. */
+    advances: number[];
+    /** Top and bottom of the line's caret, in grid rows. */
+    top: number;
+    bottom: number;
+  }>;
+  gridWidth: number;
+  gridHeight: number;
+}
+
+let lastTextLayout: TextLayout = { lines: [], gridWidth: 0, gridHeight: 0 };
+
+/**
+ * The layout of the most recently rasterized text.
+ *
+ * Cached masks skip `rasterizeText`, so this can be stale — callers must
+ * rasterize (or hit `getTextMask`, which does) before trusting it.
+ */
+export function getTextLayout(): TextLayout { return lastTextLayout; }
+
 /**
  * Rasterize a block of text to a boolean grid.
  *
@@ -571,6 +595,16 @@ export function rasterizeText(opts: RasterizeTextOptions): GlyphMask | null {
   // down from its top. Every line then shares one scale and one pitch.
   const blockTop = padPx + (gridHeight * SS - blockH) / 2;
 
+  /*
+    Record each line's geometry as it is drawn.
+
+    The caret needs to land between two characters of the RENDERED text, and
+    only this function knows where that is: the scale, the per-line centring and
+    the baseline pitch are all computed here. Measuring them again anywhere else
+    would be a second implementation of the layout, free to drift from this one.
+  */
+  lastTextLayout = { lines: [], gridWidth, gridHeight };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line) continue;
@@ -583,6 +617,20 @@ export function rasterizeText(opts: RasterizeTextOptions): GlyphMask | null {
     const originX = padPx + (gridWidth * SS - inkW) / 2 - inkLeft;
     const originY = blockTop + capPx + linePitchPx * i;
     ctx.fillText(line, originX, originY);
+
+    // Per-character advances, converted to GRID space (cells, not pixels), so
+    // the renderer can place a caret without knowing anything about fonts.
+    const advances: number[] = [];
+    for (let k = 0; k <= line.length; k++) {
+      const w = ctx.measureText(line.slice(0, k)).width;
+      advances.push((originX + w - padPx) / SS);
+    }
+    lastTextLayout.lines.push({
+      text: line,
+      advances,
+      top: (originY - capPx - padPx) / SS,
+      bottom: (originY + descentPx - padPx) / SS,
+    });
   }
 
   const img = ctx.getImageData(0, 0, rw, rh).data;
@@ -639,13 +687,28 @@ export function getGlyphMask(opts: RasterizeOptions): GlyphMask | null {
  * they are rendered by different code with different descender budgets, and
  * serving one for the other would be a silent size change.
  */
+const layoutCache = new Map<string, TextLayout>();
+
 export function getTextMask(opts: RasterizeTextOptions): GlyphMask | null {
   const key = `text:${opts.text}|${opts.fontFamily}|${opts.fontWeight ?? 400}|` +
     `${opts.gridWidth}x${opts.gridHeight}|${opts.fill ?? 0.94}|${opts.fillX ?? 0.99}`;
-  if (cache.has(key)) return cache.get(key)!;
+  if (cache.has(key)) {
+    /*
+      Restore the LAYOUT along with the mask.
+
+      A cache hit skips `rasterizeText`, so `lastTextLayout` would still
+      describe whatever was rasterized last — and the caret would be drawn
+      against the wrong text. The mask and its layout are produced together and
+      have to be cached together.
+    */
+    const cachedLayout = layoutCache.get(key);
+    if (cachedLayout) lastTextLayout = cachedLayout;
+    return cache.get(key)!;
+  }
   const mask = rasterizeText(opts);
   cache.set(key, mask);
+  layoutCache.set(key, lastTextLayout);
   return mask;
 }
 
-export function clearMaskCache(): void { cache.clear(); }
+export function clearMaskCache(): void { cache.clear(); layoutCache.clear(); }
